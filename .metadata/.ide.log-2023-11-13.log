@@ -1,0 +1,36 @@
+2023-11-14 09:48:07,789 [INFO] UtilMem:75 - End SaveConfig() Used Memory: 284102680 Bytes (500170752)
+2023-11-14 09:48:07,929 [INFO] UtilMem:75 - End SaveConfig() Used Memory: 295112736 Bytes (500170752)
+2023-11-14 09:48:08,916 [INFO] UtilMem:75 - End SaveConfig() Used Memory: 393851376 Bytes (500170752)
+2023-11-14 09:48:09,821 [INFO] BlockDiagram:2759 - set Specific Code input for plugin: NVIC
+2023-11-14 09:48:09,822 [INFO] BlockDiagram:2759 - set Specific Code input for plugin: USART
+2023-11-14 09:48:09,822 [INFO] BlockDiagram:2759 - set Specific Code input for plugin: SYS
+2023-11-14 09:48:09,822 [INFO] BlockDiagram:2759 - set Specific Code input for plugin: GPIO
+2023-11-14 09:48:09,822 [INFO] BlockDiagram:2759 - set Specific Code input for plugin: RCC
+2023-11-14 09:48:09,823 [INFO] BlockDiagram:2759 - set Specific Code input for plugin: I2C
+2023-11-14 09:48:09,825 [INFO] CodeGenerator:799 - code generatio: config db path: C:\ST\STM32CubeIDE_1.13.2\STM32CubeIDE\plugins\com.st.stm32cube.common.mx_6.9.2.202309101412\\db\
+2023-11-14 09:48:09,836 [WARN] IP:2114 - I2C_Coeff_DF not found: check if there is a RefParameter without a condition.
+2023-11-14 09:48:09,837 [WARN] IP:2114 - Analog_Filter not found: check if there is a RefParameter without a condition.
+2023-11-14 09:48:10,181 [INFO] CodeEngine:255 - oldGeneratedFile, C:\Users\agusg\STM32CubeIDE\workspace_1.13.2\scaner_i2c\MXTmpFiles\license.tmp_save
+2023-11-14 09:48:11,079 [INFO] CodeEngine:279 - Generated code: C:\Users\agusg\STM32CubeIDE\workspace_1.13.2\scaner_i2c\MXTmpFiles\license.tmp
+2023-11-14 09:48:11,414 [INFO] CodeEngine:255 - oldGeneratedFile, C:\Users\agusg\STM32CubeIDE\workspace_1.13.2\scaner_i2c\MXTmpFiles\gpio.tmp_save
+2023-11-14 09:48:11,736 [INFO] CodeEngine:279 - Generated code: C:\Users\agusg\STM32CubeIDE\workspace_1.13.2\scaner_i2c\MXTmpFiles\gpio.tmp
+2023-11-14 09:48:11,999 [INFO] CodeEngine:255 - oldGeneratedFile, C:\Users\agusg\STM32CubeIDE\workspace_1.13.2\scaner_i2c\Core\Src\stm32f1xx_it.c_save
+2023-11-14 09:48:12,598 [INFO] CodeEngine:279 - Generated code: C:\Users\agusg\STM32CubeIDE\workspace_1.13.2\scaner_i2c\Core\Src\stm32f1xx_it.c
+2023-11-14 09:48:12,654 [INFO] CodeEngine:255 - oldGeneratedFile, C:\Users\agusg\STM32CubeIDE\workspace_1.13.2\scaner_i2c\Core\Inc\stm32f1xx_it.h_save
+2023-11-14 09:48:12,831 [INFO] CodeEngine:279 - Generated code: C:\Users\agusg\STM32CubeIDE\workspace_1.13.2\scaner_i2c\Core\Inc\stm32f1xx_it.h
+2023-11-14 09:48:12,888 [INFO] CodeEngine:255 - oldGeneratedFile, C:\Users\agusg\STM32CubeIDE\workspace_1.13.2\scaner_i2c\Core\Src\stm32f1xx_hal_msp.c_save
+2023-11-14 09:48:13,252 [INFO] CodeEngine:279 - Generated code: C:\Users\agusg\STM32CubeIDE\workspace_1.13.2\scaner_i2c\Core\Src\stm32f1xx_hal_msp.c
+2023-11-14 09:48:13,289 [INFO] CodeEngine:255 - oldGeneratedFile, C:\Users\agusg\STM32CubeIDE\workspace_1.13.2\scaner_i2c\MXTmpFiles\system.tmp_save
+2023-11-14 09:48:13,439 [INFO] CodeEngine:279 - Generated code: C:\Users\agusg\STM32CubeIDE\workspace_1.13.2\scaner_i2c\MXTmpFiles\system.tmp
+2023-11-14 09:48:13,489 [INFO] CodeEngine:311 - oldGeneratedFile, C:\Users\agusg\STM32CubeIDE\workspace_1.13.2\scaner_i2c\Core\Inc\stm32f1xx_hal_conf.h_save
+2023-11-14 09:48:13,770 [INFO] CodeEngine:335 - Generated code: C:\Users\agusg\STM32CubeIDE\workspace_1.13.2\scaner_i2c\Core\Inc\stm32f1xx_hal_conf.h
+2023-11-14 09:48:13,872 [INFO] CodeEngine:255 - oldGeneratedFile, C:\Users\agusg\STM32CubeIDE\workspace_1.13.2\scaner_i2c\Core\Inc\main.h_save
+2023-11-14 09:48:14,170 [INFO] CodeEngine:279 - Generated code: C:\Users\agusg\STM32CubeIDE\workspace_1.13.2\scaner_i2c\Core\Inc\main.h
+2023-11-14 09:48:14,210 [INFO] CodeEngine:255 - oldGeneratedFile, C:\Users\agusg\STM32CubeIDE\workspace_1.13.2\scaner_i2c\Core\Src\main.c_save
+2023-11-14 09:48:14,511 [INFO] CodeEngine:279 - Generated code: C:\Users\agusg\STM32CubeIDE\workspace_1.13.2\scaner_i2c\Core\Src\main.c
+2023-11-14 09:48:15,848 [INFO] ProjectBuilder:3064 - Time for Copy HAL[1] : 297mS.
+2023-11-14 09:48:15,860 [INFO] ProjectBuilder:4404 - Project Generator version: 4.1.0
+2023-11-14 09:48:16,426 [INFO] ConfigFileManager:1457 - The Die is : DIE410
+2023-11-14 09:48:16,459 [INFO] ApiDbMcu:507 - Load IP Config File for FATFS
+2023-11-14 09:48:16,504 [INFO] ApiDbMcu:507 - Load IP Config File for FREERTOS
+2023-11-14 09:48:16,536 [INFO] ApiDbMcu:507 - Load IP Config File for USB_DEVICE
