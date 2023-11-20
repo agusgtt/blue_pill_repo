@@ -24,7 +24,7 @@
 #include "stdio.h"
 #include "string.h"
 #include "LCD_I2C.h"
-
+#include "keypad_lib.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -52,8 +52,9 @@ PCD_HandleTypeDef hpcd_USB_FS;
 /* USER CODE BEGIN PV */
 uint8_t flag_on_off = 0;		//bandera de conectar el dispositivo
 uint8_t flag_config = 0;
-uint8_t input_keypad = 0;
-
+char input_keypad = 0;
+//char char_as_str[];// = {input_keypad, '\0'};//char mensaje[];
+char buffer[20]="input key ";
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -104,6 +105,7 @@ int main(void)
   MX_I2C1_Init();
   MX_USB_PCD_Init();
   /* USER CODE BEGIN 2 */
+  keypad_init();
   LCD_I2C_init();
 	//esto podria estar encapsulado
   	  LCD_I2C_cmd(LCD_LINEA1);
@@ -125,7 +127,7 @@ int main(void)
   while (1)
   {
 	  LCD_I2C_cmd(LCD_CLEAR);
-	  if(input_keypad=="C"||input_keypad=="V"||input_keypad=="R"||input_keypad=="P"){
+	  if(input_keypad=='C'||input_keypad=='V'||input_keypad=='R'||input_keypad=='P'){
 		  //ingresa a la configuracion de modo
 		  flag_config=1;
 		  //guardar el modo que se selecciono
@@ -135,7 +137,7 @@ int main(void)
 			  //
 			  LCD_I2C_cmd(LCD_LINEA3);
 			  LCD_I2C_write_text("   flag_config   ");
-			  if(input_keypad=="k"){
+			  if(input_keypad=='K'){
 				  flag_config=0;//sale del while y vuelve al super loop
 			  }
 		  }
@@ -143,9 +145,20 @@ int main(void)
 	  if(flag_on_off){
 		  //switch con los cuatro case y los modos de control
 		  while(flag_on_off){
+			  input_keypad=keypad_scan();
+			  if(input_keypad!=0){
+				  char char_as_str[] = {input_keypad, '\0'};
+				  LCD_I2C_cmd(LCD_LINEA2);
+				  strcat(buffer, char_as_str);
+				  LCD_I2C_write_text(buffer);
+				  buffer[10]='\0';
+				  input_keypad=0;
+			  }
 			  LCD_I2C_cmd(LCD_LINEA4);
 			  LCD_I2C_write_text("   flag_on_off   ");
-			  HAL_Delay(100);
+			  HAL_Delay(3000);
+			  LCD_I2C_cmd(LCD_CLEAR);
+
 		  }
 	  }
 
@@ -333,6 +346,22 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_10|GPIO_PIN_11, GPIO_PIN_RESET);
+
+  /*Configure GPIO pins : PB0 PB1 PB10 PB11 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_10|GPIO_PIN_11;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PB12 PB13 PB14 PB15 */
+  GPIO_InitStruct.Pin = GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PA9 */
   GPIO_InitStruct.Pin = GPIO_PIN_9;
