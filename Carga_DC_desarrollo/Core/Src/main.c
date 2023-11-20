@@ -52,7 +52,7 @@ PCD_HandleTypeDef hpcd_USB_FS;
 /* USER CODE BEGIN PV */
 uint8_t flag_on_off = 0;		//bandera de conectar el dispositivo
 uint8_t flag_config = 0;
-uint8_t input_keypad;
+uint8_t input_keypad = 0;
 
 /* USER CODE END PV */
 
@@ -113,7 +113,7 @@ int main(void)
 	  LCD_I2C_cmd(LCD_LINEA4);
 	  LCD_I2C_write_text("   A.Gotte/A.Jose   ");
 	  HAL_Delay(3000);
-	  LCD_I2C_cmd(LCD_CLEAR);
+
 
 	//se deberia hacer un POST
 
@@ -124,7 +124,8 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  if(input_keypad=="CC"||input_keypad=="CV"||input_keypad=="CR"||input_keypad=="CP"){
+	  LCD_I2C_cmd(LCD_CLEAR);
+	  if(input_keypad=="C"||input_keypad=="V"||input_keypad=="R"||input_keypad=="P"){
 		  //ingresa a la configuracion de modo
 		  flag_config=1;
 		  //guardar el modo que se selecciono
@@ -132,7 +133,9 @@ int main(void)
 			  //hacer scan del teclado
 			  //actualizar disp
 			  //
-			  if(input_keypad=="ok"){
+			  LCD_I2C_cmd(LCD_LINEA3);
+			  LCD_I2C_write_text("   flag_config   ");
+			  if(input_keypad=="k"){
 				  flag_config=0;//sale del while y vuelve al super loop
 			  }
 		  }
@@ -140,7 +143,9 @@ int main(void)
 	  if(flag_on_off){
 		  //switch con los cuatro case y los modos de control
 		  while(flag_on_off){
-
+			  LCD_I2C_cmd(LCD_LINEA4);
+			  LCD_I2C_write_text("   flag_on_off   ");
+			  HAL_Delay(100);
 		  }
 	  }
 
