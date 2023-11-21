@@ -16,7 +16,7 @@
 
 void keypad_init(void);
 char keypad_scan(void);
-uint8_t tipo_dat0(char input);
+uint8_t tipo_dato(char input);
 
 
 

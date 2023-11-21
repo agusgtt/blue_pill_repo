@@ -28,6 +28,7 @@ void keypad_init(void)
   GPIO_InitStruct.Pin = ROW_1_Pin | ROW_2_Pin | ROW_3_Pin | ROW_4_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
+  	  HAL_GPIO_Init(ROW_1_Port, &GPIO_InitStruct);
 	  HAL_GPIO_Init(ROW_2_Port, &GPIO_InitStruct);
 	  HAL_GPIO_Init(ROW_3_Port, &GPIO_InitStruct);
 	  HAL_GPIO_Init(ROW_4_Port, &GPIO_InitStruct);
@@ -94,7 +95,7 @@ return 0; // No key pressed
 }
 
 
-uint8_t tipo_dat0(char input){
+uint8_t tipo_dato(char input){
 	if(input=='C'||input=='V'||input=='R'||input=='P')
 		return 2;
 	if(input=='K')
