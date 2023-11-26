@@ -44,7 +44,6 @@
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
-DMA_HandleTypeDef hdma_adc1;
 
 I2C_HandleTypeDef hi2c1;
 
@@ -61,6 +60,7 @@ PCD_HandleTypeDef hpcd_USB_FS;
 uint8_t flag_on_off = 0;		//bandera de conectar el dispositivo
 uint8_t flag_config = 0;
 uint8_t flag_update_control = 0;
+uint8_t flag_update_adc = 0;
 uint8_t cont_timer_update = 0;
 uint32_t input_adc[2];
 char input_keypad = 0;
@@ -72,7 +72,6 @@ char buffer[20]="input key ";
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_DMA_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_USB_PCD_Init(void);
@@ -82,7 +81,8 @@ static void MX_SPI1_Init(void);
 void agregar_digito(char *buffer, char digito);
 void borrar_ultimo_digito(char *buffer);
 void display_update_conf(char modo_op,char *dato);
-void display_update_stat(char modo_op, char *dato);
+void display_update_stat(char modo_op, char *dato, uint32_t volt);
+void display_update_running(char modo_op,uint32_t volt, uint32_t corriente);
 void enviar_spi_dac(uint16_t dato);
 
 /* USER CODE END PFP */
@@ -121,7 +121,6 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_DMA_Init();
   MX_ADC1_Init();
   MX_I2C1_Init();
   MX_USB_PCD_Init();
@@ -144,7 +143,9 @@ int main(void)
 
 
   HAL_TIM_Base_Start_IT(&htim2);
+
   //HAL_ADC_Start_DMA(&hadc1, input_adc, 2);//cuelga el programa
+  HAL_ADCEx_Calibration_Start(&hadc1);
 
 
 
@@ -166,10 +167,17 @@ int main(void)
   while (1)
   {
 	  if(flag_update_control){
-		  display_update_stat(modo_carga,input_valor);
+		  display_update_stat(modo_carga,input_valor,input_adc[0]);
 		  flag_update_control=0;
-		  control_spi++;
-		  enviar_spi_dac(control_spi*10);
+		  //HAL_ADC_Start(&hadc1);
+		  //AL_ADC_PollForConversion(&hadc1, 1);
+		  //AD_RES = HAL_ADC_GetValue(&hadc1);
+		  HAL_ADC_Start(&hadc1);
+		  HAL_ADC_PollForConversion(&hadc1, 1);
+		  input_adc[0]=HAL_ADC_GetValue(&hadc1);
+		  HAL_ADC_PollForConversion(&hadc1, 1);
+		  input_adc[1]=HAL_ADC_GetValue(&hadc1);
+		  enviar_spi_dac(input_adc[0]);
 	  }
 	  if(tipo_dato(input_keypad)==2){//tipo_dato()=2 si input es C,V,P,R
 		  //ingresa a la configuracion de modo
@@ -221,8 +229,17 @@ int main(void)
 			  }*/
 			  //LCD_I2C_cmd(LCD_LINEA4);
 			  //LCD_I2C_write_text("   flag_on_off   ");
+			  if(flag_update_adc){
+				 HAL_ADC_Start(&hadc1);
+				 HAL_ADC_PollForConversion(&hadc1, 1);
+				 input_adc[0]=HAL_ADC_GetValue(&hadc1);
+				 HAL_ADC_PollForConversion(&hadc1, 1);
+				 input_adc[1]=HAL_ADC_GetValue(&hadc1);
+				 flag_update_adc=0;
+			  }
+
 			  if(flag_update_control){
-			  display_update_stat(modo_carga,input_valor);
+			  display_update_running(modo_carga,input_adc[0],input_adc[1]);
 			  flag_update_control=0;
 			  }
 
@@ -308,7 +325,7 @@ static void MX_ADC1_Init(void)
   */
   hadc1.Instance = ADC1;
   hadc1.Init.ScanConvMode = ADC_SCAN_ENABLE;
-  hadc1.Init.ContinuousConvMode = ENABLE;
+  hadc1.Init.ContinuousConvMode = DISABLE;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
   hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
   hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
@@ -330,7 +347,6 @@ static void MX_ADC1_Init(void)
 
   /** Configure Regular Channel
   */
-  sConfig.Channel = ADC_CHANNEL_2;
   sConfig.Rank = ADC_REGULAR_RANK_2;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
@@ -491,22 +507,6 @@ static void MX_USB_PCD_Init(void)
 }
 
 /**
-  * Enable DMA controller clock
-  */
-static void MX_DMA_Init(void)
-{
-
-  /* DMA controller clock enable */
-  __HAL_RCC_DMA1_CLK_ENABLE();
-
-  /* DMA interrupt init */
-  /* DMA1_Channel1_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
-
-}
-
-/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -598,6 +598,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
  if(htim->Instance == TIM2){
 	 HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
 	 input_keypad=keypad_scan();//condicionar la lectura a que no este en modo activo la carga
+	 flag_update_adc=1;
+
 	 if(cont_timer_update>=5){
 		 flag_update_control=1;
 		 cont_timer_update=0;
@@ -638,7 +640,7 @@ void display_update_conf(char modo_op, char *dato){
 	char char_as_str[] = {modo_op, '\0'};//encapsular, funcion de uso recurrente
 	char buffer_fun[20]="";//{"Modo C",char_as_str};
 	char buffer_dato[20]="";
-	snprintf(buffer_fun, sizeof(buffer_fun), "Modo C%s:", char_as_str);
+	snprintf(buffer_fun, sizeof(buffer_fun), "Config Modo C%s:", char_as_str);
 
 	LCD_I2C_cmd(LCD_CLEAR);
 	LCD_I2C_cmd(LCD_LINEA1);
@@ -647,16 +649,16 @@ void display_update_conf(char modo_op, char *dato){
 	switch(modo_op){//print del modo
 
 	case 'C':
-		snprintf(buffer_dato, sizeof(buffer_dato), "Current: %s [mA]", dato);
+		snprintf(buffer_dato, sizeof(buffer_dato), "Current: %s0 [mA]", dato);
 		break;
 	case 'V':
-		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %s [mV]", dato);
+		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %s0 [mV]", dato);
 		break;
 	case 'R':
 		snprintf(buffer_dato, sizeof(buffer_dato), "Resist.: %s [mR]", dato);
 		break;
 	case 'P':
-		snprintf(buffer_dato, sizeof(buffer_dato), "Power.: %s [W]", dato);
+		snprintf(buffer_dato, sizeof(buffer_dato), "Power.: %s00 [W]", dato);
 		break;
 	default:
 		snprintf(buffer_dato, sizeof(buffer_dato), "Error: case def");
@@ -664,10 +666,14 @@ void display_update_conf(char modo_op, char *dato){
 	LCD_I2C_write_text(buffer_dato);
 
 }
-void display_update_stat(char modo_op, char *dato){
+
+void display_update_stat(char modo_op, char *dato,uint32_t volt){
 	char char_as_str[] = {modo_op, '\0'};//encapsular, funcion de uso recurrente
 	char buffer_fun[20]="";//{"Modo C",char_as_str};
 	char buffer_dato[20]="";
+	uint32_t volt_convertido = 0;
+	volt_convertido=volt*6600;
+	volt_convertido=volt_convertido/4096;
 	snprintf(buffer_fun, sizeof(buffer_fun), "Modo C%s:", char_as_str);
 
 	LCD_I2C_cmd(LCD_CLEAR);
@@ -678,22 +684,23 @@ void display_update_stat(char modo_op, char *dato){
 
 	case 'C':
 		LCD_I2C_cmd(LCD_LINEA2);
-		LCD_I2C_write_text("Voltage: NNN");
+		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d0 [mV]", volt_convertido);//
+		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA3);
-		snprintf(buffer_dato, sizeof(buffer_dato), "Current: %s [mA]", dato);
+		snprintf(buffer_dato, sizeof(buffer_dato), "Current: %s0 [mA]", dato);
 		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA4);
-		LCD_I2C_write_text("Power: NNN");
+		LCD_I2C_write_text("Power: 0[mW]");
 
 		break;
 	case 'V':
 		LCD_I2C_cmd(LCD_LINEA2);
-		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %s [mV]", dato);
+		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %s0 [mV]", dato);
 		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA3);
-		LCD_I2C_write_text("Current: NNN");
+		LCD_I2C_write_text("Current: 0[mA]");
 		LCD_I2C_cmd(LCD_LINEA4);
-		LCD_I2C_write_text("Power: NNN");
+		LCD_I2C_write_text("Power: 0[mW]");
 		break;
 	case 'R':
 		LCD_I2C_cmd(LCD_CLEAR);
@@ -701,19 +708,20 @@ void display_update_stat(char modo_op, char *dato){
 		snprintf(buffer_dato, sizeof(buffer_dato), "Res: %s[mohm]", dato);
 		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA2);
-		LCD_I2C_write_text("Power: NNN");
+		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d0 [mV]", volt_convertido);//
+		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA3);
-		LCD_I2C_write_text("Current: NNN");
+		LCD_I2C_write_text("Current: 0[mA]");
 		LCD_I2C_cmd(LCD_LINEA4);
-		LCD_I2C_write_text("Power: NNN");
-		break;
+		LCD_I2C_write_text("Power: 0[mW]");
 	case 'P':
 		LCD_I2C_cmd(LCD_LINEA2);
-		LCD_I2C_write_text("Voltage: NNN");
+		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d0 [mV]", volt_convertido);//
+		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA3);
-		LCD_I2C_write_text("Current: NNN");
+		LCD_I2C_write_text("Current: 0[mA]");
 		LCD_I2C_cmd(LCD_LINEA4);
-		snprintf(buffer_dato, sizeof(buffer_dato), "Power: %s [mW]", dato);
+		snprintf(buffer_dato, sizeof(buffer_dato), "Power: %s00 [mW]", dato);
 		LCD_I2C_write_text(buffer_dato);
 
 		break;
@@ -723,6 +731,36 @@ void display_update_stat(char modo_op, char *dato){
 	}
 
 }
+
+void display_update_running(char modo_op,uint32_t volt, uint32_t corriente){
+	char char_as_str[] = {modo_op, '\0'};//encapsular, funcion de uso recurrente
+	char buffer_fun[20]="";//{"Modo C",char_as_str};
+	char buffer_dato[20]="";
+	uint32_t volt_convertido = 0;
+	uint32_t corriente_convertido = 0;
+	uint32_t potencia =0;
+	volt_convertido=volt*6600;
+	volt_convertido=volt_convertido/4096;
+	corriente_convertido=corriente*3000;
+	corriente_convertido=corriente_convertido/4096;
+	potencia = volt_convertido*corriente_convertido;
+
+	snprintf(buffer_fun, sizeof(buffer_fun), "Running Modo C%s:", char_as_str);
+
+	LCD_I2C_cmd(LCD_CLEAR);
+	LCD_I2C_cmd(LCD_LINEA1);
+	LCD_I2C_write_text(buffer_fun);
+	LCD_I2C_cmd(LCD_LINEA2);
+	snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d0 [mV]", volt_convertido);//
+	LCD_I2C_write_text(buffer_dato);
+	LCD_I2C_cmd(LCD_LINEA3);
+	snprintf(buffer_dato, sizeof(buffer_dato), "Current: %d0 [mA]", corriente_convertido);//
+	LCD_I2C_write_text(buffer_dato);
+	LCD_I2C_cmd(LCD_LINEA4);
+	snprintf(buffer_dato, sizeof(buffer_dato), "Pot: %d00 [mW]", potencia);//
+	LCD_I2C_write_text(buffer_dato);
+}
+
 /* USER CODE END 4 */
 
 /**
