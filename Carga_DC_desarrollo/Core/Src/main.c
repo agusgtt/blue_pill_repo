@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "stdio.h"
+#include "stdlib.h"
 #include "string.h"
 #include "LCD_I2C.h"
 #include "keypad_lib.h"
@@ -44,6 +45,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
+ADC_HandleTypeDef hadc2;
 
 I2C_HandleTypeDef hi2c1;
 
@@ -77,6 +79,7 @@ static void MX_I2C1_Init(void);
 static void MX_USB_PCD_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_SPI1_Init(void);
+static void MX_ADC2_Init(void);
 /* USER CODE BEGIN PFP */
 void agregar_digito(char *buffer, char digito);
 void borrar_ultimo_digito(char *buffer);
@@ -126,6 +129,7 @@ int main(void)
   MX_USB_PCD_Init();
   MX_TIM2_Init();
   MX_SPI1_Init();
+  MX_ADC2_Init();
   /* USER CODE BEGIN 2 */
   enviar_spi_dac(0);
   keypad_init();
@@ -146,6 +150,7 @@ int main(void)
 
   //HAL_ADC_Start_DMA(&hadc1, input_adc, 2);//cuelga el programa
   HAL_ADCEx_Calibration_Start(&hadc1);
+  HAL_ADCEx_Calibration_Start(&hadc2);
 
 
 
@@ -159,6 +164,7 @@ int main(void)
   uint8_t flag_update_display = 0;
   uint16_t control_spi = 0;
 
+  enviar_spi_dac(control_spi);
 
   /* USER CODE END 2 */
 
@@ -175,9 +181,7 @@ int main(void)
 		  HAL_ADC_Start(&hadc1);
 		  HAL_ADC_PollForConversion(&hadc1, 1);
 		  input_adc[0]=HAL_ADC_GetValue(&hadc1);
-		  HAL_ADC_PollForConversion(&hadc1, 1);
-		  input_adc[1]=HAL_ADC_GetValue(&hadc1);
-		  enviar_spi_dac(input_adc[0]);
+		//  enviar_spi_dac(input_adc[0]);
 	  }
 	  if(tipo_dato(input_keypad)==2){//tipo_dato()=2 si input es C,V,P,R
 		  //ingresa a la configuracion de modo
@@ -219,30 +223,27 @@ int main(void)
 	  if(flag_on_off){
 		  //switch con los cuatro case y los modos de control
 		  while(flag_on_off){
-			  /*if(input_keypad!=0){
-				  char char_as_str[] = {input_keypad, '\0'};//encapsular, funcion de uso recurrente
-				  LCD_I2C_cmd(LCD_LINEA2);
-				  strcat(buffer, char_as_str);
-				  LCD_I2C_write_text(buffer);
-				  buffer[10]='\0';
-				  input_keypad=0;
-			  }*/
-			  //LCD_I2C_cmd(LCD_LINEA4);
-			  //LCD_I2C_write_text("   flag_on_off   ");
+
+
 			  if(flag_update_adc){
+				  if(modo_carga=='C'){
+				  control_spi=atoi(input_valor)*2;
+				  enviar_spi_dac(control_spi);
 				 HAL_ADC_Start(&hadc1);
-				 HAL_ADC_PollForConversion(&hadc1, 1);
+				 HAL_ADC_PollForConversion(&hadc1, 5);
 				 input_adc[0]=HAL_ADC_GetValue(&hadc1);
-				 HAL_ADC_PollForConversion(&hadc1, 1);
-				 input_adc[1]=HAL_ADC_GetValue(&hadc1);
+				 HAL_ADC_Start(&hadc2);
+				 HAL_ADC_PollForConversion(&hadc2, 5);
+				 input_adc[1]=HAL_ADC_GetValue(&hadc2);
 				 flag_update_adc=0;
+
 			  }
 
 			  if(flag_update_control){
 			  display_update_running(modo_carga,input_adc[0],input_adc[1]);
 			  flag_update_control=0;
 			  }
-
+			  }
 		  }//fin while
 	  }//fin if
 
@@ -324,12 +325,12 @@ static void MX_ADC1_Init(void)
   /** Common config
   */
   hadc1.Instance = ADC1;
-  hadc1.Init.ScanConvMode = ADC_SCAN_ENABLE;
+  hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
   hadc1.Init.ContinuousConvMode = DISABLE;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
   hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
   hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-  hadc1.Init.NbrOfConversion = 2;
+  hadc1.Init.NbrOfConversion = 1;
   if (HAL_ADC_Init(&hadc1) != HAL_OK)
   {
     Error_Handler();
@@ -344,17 +345,56 @@ static void MX_ADC1_Init(void)
   {
     Error_Handler();
   }
-
-  /** Configure Regular Channel
-  */
-  sConfig.Rank = ADC_REGULAR_RANK_2;
-  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
   /* USER CODE BEGIN ADC1_Init 2 */
 
   /* USER CODE END ADC1_Init 2 */
+
+}
+
+/**
+  * @brief ADC2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC2_Init(void)
+{
+
+  /* USER CODE BEGIN ADC2_Init 0 */
+
+  /* USER CODE END ADC2_Init 0 */
+
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC2_Init 1 */
+
+  /* USER CODE END ADC2_Init 1 */
+
+  /** Common config
+  */
+  hadc2.Instance = ADC2;
+  hadc2.Init.ScanConvMode = ADC_SCAN_DISABLE;
+  hadc2.Init.ContinuousConvMode = DISABLE;
+  hadc2.Init.DiscontinuousConvMode = DISABLE;
+  hadc2.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc2.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc2.Init.NbrOfConversion = 1;
+  if (HAL_ADC_Init(&hadc2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_2;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+  if (HAL_ADC_ConfigChannel(&hadc2, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC2_Init 2 */
+
+  /* USER CODE END ADC2_Init 2 */
 
 }
 
@@ -671,7 +711,7 @@ void display_update_stat(char modo_op, char *dato,uint32_t volt){
 	char char_as_str[] = {modo_op, '\0'};//encapsular, funcion de uso recurrente
 	char buffer_fun[20]="";//{"Modo C",char_as_str};
 	char buffer_dato[20]="";
-	uint32_t volt_convertido = 0;
+	uint16_t volt_convertido = 0;
 	volt_convertido=volt*6600;
 	volt_convertido=volt_convertido/4096;
 	snprintf(buffer_fun, sizeof(buffer_fun), "Modo C%s:", char_as_str);
@@ -757,7 +797,7 @@ void display_update_running(char modo_op,uint32_t volt, uint32_t corriente){
 	snprintf(buffer_dato, sizeof(buffer_dato), "Current: %d0 [mA]", corriente_convertido);//
 	LCD_I2C_write_text(buffer_dato);
 	LCD_I2C_cmd(LCD_LINEA4);
-	snprintf(buffer_dato, sizeof(buffer_dato), "Pot: %d00 [mW]", potencia);//
+	snprintf(buffer_dato, sizeof(buffer_dato), "Pot: %d [mW]", potencia);//
 	LCD_I2C_write_text(buffer_dato);
 }
 
