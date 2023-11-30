@@ -87,7 +87,7 @@ void display_update_conf(char modo_op,char *dato);
 void display_update_stat(char modo_op, char *dato, uint32_t volt);
 void display_update_running(char modo_op,uint32_t volt, uint32_t corriente);
 void enviar_spi_dac(uint16_t dato);
-
+uint16_t control_carga(char modo, uint16_t voltage, uint16_t current, uint16_t set_point);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -779,26 +779,49 @@ void display_update_running(char modo_op,uint32_t volt, uint32_t corriente){
 	uint32_t volt_convertido = 0;
 	uint32_t corriente_convertido = 0;
 	uint32_t potencia =0;
-	volt_convertido=volt*6600;
-	volt_convertido=volt_convertido/4096;
-	corriente_convertido=corriente*3000;
-	corriente_convertido=corriente_convertido/4096;
+	volt_convertido=volt*166;
+	volt_convertido=volt_convertido/10;
+	//volt_convertido=volt*6600;
+	//volt_convertido=volt_convertido/4096;
+	corriente_convertido=corriente*8437;
+	corriente_convertido=corriente_convertido/1000;
+	//corriente_convertido=corriente*3000;
+	//corriente_convertido=corriente_convertido/4096;
 	potencia = volt_convertido*corriente_convertido;
-
+	potencia=potencia/1000;
 	snprintf(buffer_fun, sizeof(buffer_fun), "Running Modo C%s:", char_as_str);
 
 	LCD_I2C_cmd(LCD_CLEAR);
 	LCD_I2C_cmd(LCD_LINEA1);
 	LCD_I2C_write_text(buffer_fun);
 	LCD_I2C_cmd(LCD_LINEA2);
-	snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d0 [mV]", volt_convertido);//
+	snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d [mV]", volt_convertido);//
 	LCD_I2C_write_text(buffer_dato);
 	LCD_I2C_cmd(LCD_LINEA3);
-	snprintf(buffer_dato, sizeof(buffer_dato), "Current: %d0 [mA]", corriente_convertido);//
+	snprintf(buffer_dato, sizeof(buffer_dato), "Current: %d [mA]", corriente_convertido);//
 	LCD_I2C_write_text(buffer_dato);
 	LCD_I2C_cmd(LCD_LINEA4);
 	snprintf(buffer_dato, sizeof(buffer_dato), "Pot: %d [mW]", potencia);//
 	LCD_I2C_write_text(buffer_dato);
+}
+
+uint16_t control_carga(char modo, uint16_t voltage, uint16_t current, uint16_t set_point){
+	uint32_t calculo = 0;
+	uint16_t DAC_nuevo_valor = 0;
+	switch(modo){
+	case 'C':
+		calculo = set_point * 4095;
+		calculo = calculo /2; //div num MOSFET
+		calculo = calculo /250;
+		break;
+	case 'V':
+		//rev
+	default:
+		calculo=0;
+
+	}
+	DAC_nuevo_valor=(uint16_t)calculo;
+	return DAC_nuevo_valor;
 }
 
 /* USER CODE END 4 */

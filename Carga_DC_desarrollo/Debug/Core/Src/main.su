@@ -15,4 +15,5 @@
 ../Core/Src/main.c:678:6:display_update_conf	64	static
 ../Core/Src/main.c:710:6:display_update_stat	72	static
 ../Core/Src/main.c:775:6:display_update_running	80	static
-../Core/Src/main.c:810:6:Error_Handler	4	static,ignoring_inline_asm
+../Core/Src/main.c:808:10:control_carga	24	static
+../Core/Src/main.c:833:6:Error_Handler	4	static,ignoring_inline_asm
