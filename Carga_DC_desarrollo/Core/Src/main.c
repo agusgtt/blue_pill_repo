@@ -62,7 +62,7 @@ PCD_HandleTypeDef hpcd_USB_FS;
 uint8_t flag_on_off = 0;		//bandera de conectar el dispositivo
 uint8_t flag_config = 0;
 uint8_t flag_update_control = 0;
-uint8_t flag_update_adc = 0;
+uint8_t flag_update_loop_control = 0;
 uint8_t cont_timer_update = 0;
 uint32_t input_adc[2];
 char input_keypad = 0;
@@ -133,6 +133,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   enviar_spi_dac(0);
   keypad_init();
+  HAL_Delay(30);
   LCD_I2C_init();
 
 	//esto podria estar encapsulado
@@ -142,7 +143,7 @@ int main(void)
 	  LCD_I2C_write_text("   Carga DC   ");
 	  LCD_I2C_cmd(LCD_LINEA4);
 	  LCD_I2C_write_text("   A.Gotte/A.Jose   ");
-	  HAL_Delay(3000);
+	  HAL_Delay(4000);
 	  LCD_I2C_cmd(LCD_CLEAR);
 
 
@@ -163,7 +164,7 @@ int main(void)
   uint8_t cont_digitos_input_val = 0;
   uint8_t flag_update_display = 0;
   uint16_t control_spi = 0;
-
+  uint16_t set_point = 0;
   enviar_spi_dac(control_spi);
 
   /* USER CODE END 2 */
@@ -204,6 +205,8 @@ int main(void)
 			  }
 			  else if(input_keypad=='K'){
 				  input_keypad=0;
+				  //validar parametro ingresado
+				  set_point=atoi(input_valor);
 				  flag_config=0;//sale del while y vuelve al super loop
 				  flag_update_control=1;
 				  //validar parametro ingresado
@@ -225,17 +228,18 @@ int main(void)
 		  while(flag_on_off){
 
 
-			  if(flag_update_adc){
-				  if(modo_carga=='C'){
-				  control_spi=atoi(input_valor)*2;
-				  enviar_spi_dac(control_spi);
+			  if(flag_update_loop_control){
+				 if(modo_carga=='C'){
 				 HAL_ADC_Start(&hadc1);
 				 HAL_ADC_PollForConversion(&hadc1, 5);
 				 input_adc[0]=HAL_ADC_GetValue(&hadc1);
 				 HAL_ADC_Start(&hadc2);
 				 HAL_ADC_PollForConversion(&hadc2, 5);
 				 input_adc[1]=HAL_ADC_GetValue(&hadc2);
-				 flag_update_adc=0;
+
+				 control_spi=control_carga(modo_carga,input_adc[0],input_adc[1],set_point);
+				 enviar_spi_dac(control_spi);
+				 flag_update_loop_control=0;
 
 			  }
 
@@ -638,7 +642,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
  if(htim->Instance == TIM2){
 	 HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
 	 input_keypad=keypad_scan();//condicionar la lectura a que no este en modo activo la carga
-	 flag_update_adc=1;
+	 flag_update_loop_control=1;
 
 	 if(cont_timer_update>=5){
 		 flag_update_control=1;
@@ -712,8 +716,11 @@ void display_update_stat(char modo_op, char *dato,uint32_t volt){
 	char buffer_fun[20]="";//{"Modo C",char_as_str};
 	char buffer_dato[20]="";
 	uint16_t volt_convertido = 0;
-	volt_convertido=volt*6600;
-	volt_convertido=volt_convertido/4096;
+	//volt_convertido=volt*6600;
+	//volt_convertido=volt_convertido/4096;
+	volt_convertido=volt*166;
+	volt_convertido=volt_convertido/10;
+
 	snprintf(buffer_fun, sizeof(buffer_fun), "Modo C%s:", char_as_str);
 
 	LCD_I2C_cmd(LCD_CLEAR);
@@ -724,7 +731,7 @@ void display_update_stat(char modo_op, char *dato,uint32_t volt){
 
 	case 'C':
 		LCD_I2C_cmd(LCD_LINEA2);
-		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d0 [mV]", volt_convertido);//
+		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d [mV]", volt_convertido);//
 		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA3);
 		snprintf(buffer_dato, sizeof(buffer_dato), "Current: %s0 [mA]", dato);
@@ -748,7 +755,7 @@ void display_update_stat(char modo_op, char *dato,uint32_t volt){
 		snprintf(buffer_dato, sizeof(buffer_dato), "Res: %s[mohm]", dato);
 		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA2);
-		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d0 [mV]", volt_convertido);//
+		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d [mV]", volt_convertido);//
 		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA3);
 		LCD_I2C_write_text("Current: 0[mA]");
@@ -756,7 +763,7 @@ void display_update_stat(char modo_op, char *dato,uint32_t volt){
 		LCD_I2C_write_text("Power: 0[mW]");
 	case 'P':
 		LCD_I2C_cmd(LCD_LINEA2);
-		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d0 [mV]", volt_convertido);//
+		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d [mV]", volt_convertido);//
 		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA3);
 		LCD_I2C_write_text("Current: 0[mA]");
@@ -811,14 +818,43 @@ uint16_t control_carga(char modo, uint16_t voltage, uint16_t current, uint16_t s
 	switch(modo){
 	case 'C':
 		calculo = set_point * 4095;
-		calculo = calculo /2; //div num MOSFET
+		calculo = calculo /8; //div num MOSFET
 		calculo = calculo /250;
 		break;
 	case 'V':
 		//rev
 	default:
 		calculo=0;
+		/*
+		 //-----------------------DAC Control Voltage for Mosfet---------------------------------------
+		void dacControlVoltage (void) {
+		  if (Mode == "CC"){
+		  setCurrent = reading*1000;                                //set current is equal to input value in Amps
+		  setReading = setCurrent;                                  //show the set current reading being used
+		  setControlCurrent = setCurrent * setCurrentCalibrationFactor;
+		  controlVoltage = setControlCurrent;
+		  }
 
+		  if (Mode == "CP"){
+		  setPower = reading*1000;                                  //in Watts
+		  setReading = setPower;
+		  setCurrent = setPower/ActualVoltage;
+		  setControlCurrent = setCurrent * setCurrentCalibrationFactor;
+		  controlVoltage = setControlCurrent;                       //
+		  }
+
+		  if (Mode == "CR"){
+		  setResistance = reading;                                  //in ohms
+		  setReading = setResistance;
+		  setCurrent = (ActualVoltage)/setResistance*1000;
+		  setControlCurrent = setCurrent * setCurrentCalibrationFactor;
+		  controlVoltage = setControlCurrent;
+		  }
+
+
+
+
+		 */
 	}
 	DAC_nuevo_valor=(uint16_t)calculo;
 	return DAC_nuevo_valor;
