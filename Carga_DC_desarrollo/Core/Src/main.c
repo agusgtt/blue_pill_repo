@@ -174,14 +174,13 @@ int main(void)
   while (1)
   {
 	  if(flag_update_control){
+
+		  HAL_ADC_Start(&hadc1);
+		  HAL_ADC_PollForConversion(&hadc1, 5);
+		  input_adc[0]=HAL_ADC_GetValue(&hadc1);
+
 		  display_update_stat(modo_carga,input_valor,input_adc[0]);
 		  flag_update_control=0;
-		  //HAL_ADC_Start(&hadc1);
-		  //AL_ADC_PollForConversion(&hadc1, 1);
-		  //AD_RES = HAL_ADC_GetValue(&hadc1);
-		  HAL_ADC_Start(&hadc1);
-		  HAL_ADC_PollForConversion(&hadc1, 1);
-		  input_adc[0]=HAL_ADC_GetValue(&hadc1);
 		//  enviar_spi_dac(input_adc[0]);
 	  }
 	  if(tipo_dato(input_keypad)==2){//tipo_dato()=2 si input es C,V,P,R
@@ -715,11 +714,12 @@ void display_update_stat(char modo_op, char *dato,uint32_t volt){
 	char char_as_str[] = {modo_op, '\0'};//encapsular, funcion de uso recurrente
 	char buffer_fun[20]="";//{"Modo C",char_as_str};
 	char buffer_dato[20]="";
-	uint16_t volt_convertido = 0;
+	uint32_t volt_convertido = 0;
+	//float float_volt = 0;
 	//volt_convertido=volt*6600;
 	//volt_convertido=volt_convertido/4096;
 	volt_convertido=volt*166;
-	volt_convertido=volt_convertido/10;
+	volt_convertido=volt_convertido/100;
 
 	snprintf(buffer_fun, sizeof(buffer_fun), "Modo C%s:", char_as_str);
 
@@ -731,13 +731,13 @@ void display_update_stat(char modo_op, char *dato,uint32_t volt){
 
 	case 'C':
 		LCD_I2C_cmd(LCD_LINEA2);
-		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d [mV]", volt_convertido);//
+		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d.%d [V]", volt_convertido/100,volt_convertido%100);//
 		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA3);
-		snprintf(buffer_dato, sizeof(buffer_dato), "Current: %s0 [mA]", dato);
+		snprintf(buffer_dato, sizeof(buffer_dato), "Current: %s0 [A]", dato);
 		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA4);
-		LCD_I2C_write_text("Power: 0[mW]");
+		LCD_I2C_write_text("Power: 0[W]");
 
 		break;
 	case 'V':
@@ -755,7 +755,7 @@ void display_update_stat(char modo_op, char *dato,uint32_t volt){
 		snprintf(buffer_dato, sizeof(buffer_dato), "Res: %s[mohm]", dato);
 		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA2);
-		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d [mV]", volt_convertido);//
+		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d.%d [V]",  volt_convertido/100,volt_convertido%100);//
 		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA3);
 		LCD_I2C_write_text("Current: 0[mA]");
@@ -763,7 +763,7 @@ void display_update_stat(char modo_op, char *dato,uint32_t volt){
 		LCD_I2C_write_text("Power: 0[mW]");
 	case 'P':
 		LCD_I2C_cmd(LCD_LINEA2);
-		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d [mV]", volt_convertido);//
+		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d.%d [V]",  volt_convertido/100,volt_convertido%100);//
 		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA3);
 		LCD_I2C_write_text("Current: 0[mA]");
@@ -787,13 +787,9 @@ void display_update_running(char modo_op,uint32_t volt, uint32_t corriente){
 	uint32_t corriente_convertido = 0;
 	uint32_t potencia =0;
 	volt_convertido=volt*166;
-	volt_convertido=volt_convertido/10;
-	//volt_convertido=volt*6600;
-	//volt_convertido=volt_convertido/4096;
+	volt_convertido=volt_convertido/100;
 	corriente_convertido=corriente*8437;
-	corriente_convertido=corriente_convertido/1000;
-	//corriente_convertido=corriente*3000;
-	//corriente_convertido=corriente_convertido/4096;
+	corriente_convertido=corriente_convertido/10000;
 	potencia = volt_convertido*corriente_convertido;
 	potencia=potencia/1000;
 	snprintf(buffer_fun, sizeof(buffer_fun), "Running Modo C%s:", char_as_str);
@@ -802,13 +798,13 @@ void display_update_running(char modo_op,uint32_t volt, uint32_t corriente){
 	LCD_I2C_cmd(LCD_LINEA1);
 	LCD_I2C_write_text(buffer_fun);
 	LCD_I2C_cmd(LCD_LINEA2);
-	snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d [mV]", volt_convertido);//
+	snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d.%d [V]",  volt_convertido/100,volt_convertido%100);//
 	LCD_I2C_write_text(buffer_dato);
 	LCD_I2C_cmd(LCD_LINEA3);
-	snprintf(buffer_dato, sizeof(buffer_dato), "Current: %d [mA]", corriente_convertido);//
+	snprintf(buffer_dato, sizeof(buffer_dato), "Current: %d.%d [A]", corriente_convertido/100,corriente_convertido%100);//
 	LCD_I2C_write_text(buffer_dato);
 	LCD_I2C_cmd(LCD_LINEA4);
-	snprintf(buffer_dato, sizeof(buffer_dato), "Pot: %d [mW]", potencia);//
+	snprintf(buffer_dato, sizeof(buffer_dato), "Pot: %d.%d [W]", potencia/10,potencia%10);//
 	LCD_I2C_write_text(buffer_dato);
 }
 
