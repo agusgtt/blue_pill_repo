@@ -53,6 +53,7 @@ I2C_HandleTypeDef hi2c1;
 SPI_HandleTypeDef hspi1;
 
 TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim3;
 
 PCD_HandleTypeDef hpcd_USB_FS;
 
@@ -62,7 +63,7 @@ PCD_HandleTypeDef hpcd_USB_FS;
 
 uint8_t flag_on_off = 0;		//bandera de conectar el dispositivo
 uint8_t flag_config = 0;
-uint8_t flag_update_control = 0;
+uint8_t flag_update_display_1_seg = 0;
 uint8_t flag_update_loop_control = 0;
 uint8_t cont_timer_update = 0;
 uint32_t input_adc[2];
@@ -81,6 +82,7 @@ static void MX_USB_PCD_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_ADC2_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 void agregar_digito(char *buffer, char digito);
 void borrar_ultimo_digito(char *buffer);
@@ -132,6 +134,7 @@ int main(void)
   MX_TIM2_Init();
   MX_SPI1_Init();
   MX_ADC2_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
   enviar_spi_dac(0);
   keypad_init();
@@ -176,7 +179,12 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  if(flag_update_control){
+	  if(control_spi!=0){//set del dac en cero
+		  control_spi=0;
+		  enviar_spi_dac(control_spi);
+	  }
+
+	  if(flag_update_display_1_seg){//update display modo stand by
 
 		  HAL_ADC_Start(&hadc1);
 		  HAL_ADC_PollForConversion(&hadc1, 5);
@@ -186,14 +194,14 @@ int main(void)
 
 		  //display_update_stat(modo_carga,input_valor,input_adc[0]);
 		  display_update_stat(modo_carga,input_valor,input_adc[0]);
-		  flag_update_control=0;
+		  flag_update_display_1_seg=0;
 
 
 		//  enviar_spi_dac(input_adc[0]);
 	  }
 	  if(tipo_dato(input_keypad)==2){//tipo_dato()=2 si input es C,V,P,R
 		  //ingresa a la configuracion de modo
-		  //modo_carga=input_keypad;//guardar el modo que se selecciono
+
 		  flag_config=1;
 
 		  while(flag_config){
@@ -215,7 +223,7 @@ int main(void)
 				  //validar parametro ingresado
 				  set_point=atoi(input_valor);
 				  flag_config=0;//sale del while y vuelve al super loop
-				  flag_update_control=1;
+				  flag_update_display_1_seg=1;
 				  //validar parametro ingresado
 			  }
 			  else if(tipo_dato(input_keypad)==2){
@@ -233,30 +241,26 @@ int main(void)
 	  if(flag_on_off){
 		  //switch con los cuatro case y los modos de control
 		  while(flag_on_off){
-
-
 			  if(flag_update_loop_control){
-				 if(modo_carga=='C'){
-				 HAL_ADC_Start(&hadc1);
-				 HAL_ADC_PollForConversion(&hadc1, 5);
-				 input_adc[0]=HAL_ADC_GetValue(&hadc1);
-				 HAL_ADC_Start(&hadc2);
-				 HAL_ADC_PollForConversion(&hadc2, 5);
-				 input_adc[1]=HAL_ADC_GetValue(&hadc2);
+				 if(modo_carga=='C'){//quitar el if, la funcion control carga ya cuenta con el case por modo
+					 HAL_ADC_Start(&hadc1);
+					 HAL_ADC_PollForConversion(&hadc1, 5);
+					 input_adc[0]=HAL_ADC_GetValue(&hadc1);
+					 HAL_ADC_Start(&hadc2);
+					 HAL_ADC_PollForConversion(&hadc2, 5);
+					 input_adc[1]=HAL_ADC_GetValue(&hadc2);
 
-				 control_spi=control_carga(modo_carga,input_adc[0],input_adc[1],set_point);
-				 enviar_spi_dac(control_spi);
-				 flag_update_loop_control=0;
-
+					 control_spi=control_carga(modo_carga,input_adc[0],input_adc[1],set_point);
+					 enviar_spi_dac(control_spi);
+					 flag_update_loop_control=0;
+				 }
 			  }
-
-			  if(flag_update_control){
-			  display_update_running(modo_carga,input_adc[0],input_adc[1]);
-			  flag_update_control=0;
-			  }
-			  }
-		  }//fin while
-	  }//fin if
+			  if(flag_update_display_1_seg){
+				  display_update_running(modo_carga,input_adc[0],input_adc[1]);
+				  flag_update_display_1_seg=0;
+				  }
+		  }//fin while flag_on_off
+	  }//fin if flag_on_off
 
 
 
@@ -527,6 +531,51 @@ static void MX_TIM2_Init(void)
 }
 
 /**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 179;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 7;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+
+}
+
+/**
   * @brief USB Initialization Function
   * @param None
   * @retval None
@@ -649,14 +698,19 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
  if(htim->Instance == TIM2){
 	 HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
 	 input_keypad=keypad_scan();//condicionar la lectura a que no este en modo activo la carga
-	 flag_update_loop_control=1;
+	 flag_update_loop_control=1; //movemos al timer3
 
-	 if(cont_timer_update>=5){
-		 flag_update_control=1;
+	 if(cont_timer_update>=5){//cada segundo y medio actualiza el display
+
+		 flag_update_display_1_seg=1;//update nombre
 		 cont_timer_update=0;
 	 }
 	 else cont_timer_update++;
  }
+ if(htim->Instance == TIM3){
+ 	 //disparar control de la carga
+	 //flag_update_loop_control=1; //flag ciclo de control
+  }
 }
 
 void agregar_digito(char *buffer, char digito) {
@@ -743,7 +797,7 @@ void display_update_stat(char modo_op, char *dato,uint32_t volt){
 	//float float_volt = 0;
 	//volt_convertido=volt*6600;
 	//volt_convertido=volt_convertido/4096;
-	volt_convertido=volt*166;
+	volt_convertido=volt*122;
 	volt_convertido=volt_convertido/100;
 
 	snprintf(buffer_fun, sizeof(buffer_fun), "Modo C%s:", char_as_str);
@@ -811,7 +865,7 @@ void display_update_running(char modo_op,uint32_t volt, uint32_t corriente){
 	uint32_t volt_convertido = 0;
 	uint32_t corriente_convertido = 0;
 	uint32_t potencia =0;
-	volt_convertido=volt*166;
+	volt_convertido=volt*122;
 	volt_convertido=volt_convertido/100;
 	corriente_convertido=corriente*8437;
 	corriente_convertido=corriente_convertido/10000;
@@ -838,9 +892,9 @@ uint16_t control_carga(char modo, uint16_t voltage, uint16_t current, uint16_t s
 	uint16_t DAC_nuevo_valor = 0;
 	switch(modo){
 	case 'C':
-		calculo = set_point * 4095;
-		calculo = calculo /8; //div num MOSFET
-		calculo = calculo /250;
+		calculo = set_point * 4095;//dac resol
+		//calculo = calculo /8; //div num MOSFET
+		calculo = calculo /500;//div corriente max por cada mosfet 250->2500 mA
 		break;
 	case 'V':
 		//rev
