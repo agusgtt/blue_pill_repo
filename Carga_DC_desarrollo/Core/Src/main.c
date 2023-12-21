@@ -37,6 +37,12 @@
 /* USER CODE BEGIN PD */
 #define BUFFER_SIZE_input 4
 #define TC74_ADDRESS 0x90//direccion og.48 moviendo un bit 90
+#define N_TRANSISTORES 1
+#define I_MAX_x_TRANSISTOR 500 // 500 -> 5000mA
+#define FACTOR_ADC_VOLTAGE_mult 122
+#define FACTOR_ADC_VOLTAGE_div 100
+#define FACTOR_ADC_CURRENT_mult 7326//8437
+#define FACTOR_ADC_CURRENT_div 10000
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -170,7 +176,7 @@ int main(void)
   uint8_t flag_update_display = 0;
   uint16_t control_spi = 0;
   uint16_t set_point = 0;
-  uint16_t temperatura_sensor = 0;
+  //uint16_t temperatura_sensor = 0;
   enviar_spi_dac(control_spi);
 
   /* USER CODE END 2 */
@@ -179,29 +185,19 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  if(control_spi!=0){//set del dac en cero
-		  control_spi=0;
-		  enviar_spi_dac(control_spi);
-	  }
 
 	  if(flag_update_display_1_seg){//update display modo stand by
 
 		  HAL_ADC_Start(&hadc1);
 		  HAL_ADC_PollForConversion(&hadc1, 5);
 		  input_adc[0]=HAL_ADC_GetValue(&hadc1);
-
-		  temperatura_sensor=leer_temperatura();
-
 		  //display_update_stat(modo_carga,input_valor,input_adc[0]);
 		  display_update_stat(modo_carga,input_valor,input_adc[0]);
 		  flag_update_display_1_seg=0;
-
-
-		//  enviar_spi_dac(input_adc[0]);
 	  }
+
 	  if(tipo_dato(input_keypad)==2){//tipo_dato()=2 si input es C,V,P,R
 		  //ingresa a la configuracion de modo
-
 		  flag_config=1;
 
 		  while(flag_config){
@@ -239,10 +235,10 @@ int main(void)
 		}//fin while config
 	  }//fin if config
 	  if(flag_on_off){
-		  //switch con los cuatro case y los modos de control
+		  //setting del modo de trabajo
 		  while(flag_on_off){
 			  if(flag_update_loop_control){
-				 if(modo_carga=='C'){//quitar el if, la funcion control carga ya cuenta con el case por modo
+
 					 HAL_ADC_Start(&hadc1);
 					 HAL_ADC_PollForConversion(&hadc1, 5);
 					 input_adc[0]=HAL_ADC_GetValue(&hadc1);
@@ -253,13 +249,17 @@ int main(void)
 					 control_spi=control_carga(modo_carga,input_adc[0],input_adc[1],set_point);
 					 enviar_spi_dac(control_spi);
 					 flag_update_loop_control=0;
-				 }
+
 			  }
 			  if(flag_update_display_1_seg){
 				  display_update_running(modo_carga,input_adc[0],input_adc[1]);
 				  flag_update_display_1_seg=0;
 				  }
 		  }//fin while flag_on_off
+		  //configuracion post carga activa
+		  input_keypad=0;
+		  control_spi=0;
+		  enviar_spi_dac(control_spi);
 	  }//fin if flag_on_off
 
 
@@ -549,9 +549,9 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 1 */
   htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 179;
+  htim3.Init.Prescaler = 7199;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 7;
+  htim3.Init.Period = 1499;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
@@ -704,6 +704,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
 		 flag_update_display_1_seg=1;//update nombre
 		 cont_timer_update=0;
+		 //temperatura_sensor=leer_temperatura();
 	 }
 	 else cont_timer_update++;
  }
@@ -794,11 +795,8 @@ void display_update_stat(char modo_op, char *dato,uint32_t volt){
 	char buffer_fun[20]="";//{"Modo C",char_as_str};
 	char buffer_dato[20]="";
 	uint32_t volt_convertido = 0;
-	//float float_volt = 0;
-	//volt_convertido=volt*6600;
-	//volt_convertido=volt_convertido/4096;
-	volt_convertido=volt*122;
-	volt_convertido=volt_convertido/100;
+	volt_convertido=volt*FACTOR_ADC_VOLTAGE_mult;//122;
+	volt_convertido=volt_convertido/FACTOR_ADC_VOLTAGE_div;//100;
 
 	snprintf(buffer_fun, sizeof(buffer_fun), "Modo C%s:", char_as_str);
 
@@ -810,7 +808,7 @@ void display_update_stat(char modo_op, char *dato,uint32_t volt){
 
 	case 'C':
 		LCD_I2C_cmd(LCD_LINEA2);
-		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d.%02d [V]", volt_convertido/100,volt_convertido%100);//
+		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d.%02d [V]", (int)volt_convertido/100,(int)volt_convertido%100);//
 		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA3);
 		snprintf(buffer_dato, sizeof(buffer_dato), "Current: %s0 [mA]", dato);
@@ -834,15 +832,16 @@ void display_update_stat(char modo_op, char *dato,uint32_t volt){
 		snprintf(buffer_dato, sizeof(buffer_dato), "Res: %s[mohm]", dato);
 		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA2);
-		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d.%02d [V]",  volt_convertido/100,volt_convertido%100);//
+		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d.%02d [V]",  (int)volt_convertido/100,(int)volt_convertido%100);//
 		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA3);
 		LCD_I2C_write_text("Current: 0[mA]");
 		LCD_I2C_cmd(LCD_LINEA4);
 		LCD_I2C_write_text("Power: 0[mW]");
+		break;
 	case 'P':
 		LCD_I2C_cmd(LCD_LINEA2);
-		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d.%02d [V]",  volt_convertido/100,volt_convertido%100);//
+		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d.%02d [V]",  (int)volt_convertido/100,(int)volt_convertido%100);//
 		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA3);
 		LCD_I2C_write_text("Current: 0[mA]");
@@ -865,71 +864,77 @@ void display_update_running(char modo_op,uint32_t volt, uint32_t corriente){
 	uint32_t volt_convertido = 0;
 	uint32_t corriente_convertido = 0;
 	uint32_t potencia =0;
-	volt_convertido=volt*122;
-	volt_convertido=volt_convertido/100;
-	corriente_convertido=corriente*8437;
-	corriente_convertido=corriente_convertido/10000;
+	uint16_t resistencia =0;
+	volt_convertido=volt*FACTOR_ADC_VOLTAGE_mult;//122;
+	volt_convertido=volt_convertido/FACTOR_ADC_VOLTAGE_div;//100;
+	corriente_convertido=corriente*FACTOR_ADC_CURRENT_mult;//8437;
+	corriente_convertido=corriente_convertido/FACTOR_ADC_CURRENT_div;//10000;
 	potencia = volt_convertido*corriente_convertido;
 	potencia=potencia/1000;
-	snprintf(buffer_fun, sizeof(buffer_fun), "Running Modo C%s:", char_as_str);
+	resistencia=volt_convertido/corriente_convertido;
+
 
 	LCD_I2C_cmd(LCD_CLEAR);
-	LCD_I2C_cmd(LCD_LINEA1);
-	LCD_I2C_write_text(buffer_fun);
+	if(modo_op == 'R'){
+		LCD_I2C_cmd(LCD_LINEA1);
+		if(resistencia>4999)snprintf(buffer_dato, sizeof(buffer_dato), "Res: O.Lim");
+		else snprintf(buffer_dato, sizeof(buffer_dato), "Res: %d[ohm]", resistencia);
+		LCD_I2C_write_text(buffer_dato);
+	}
+	else{
+		snprintf(buffer_fun, sizeof(buffer_fun), "Running Modo C%s:", char_as_str);
+		LCD_I2C_cmd(LCD_LINEA1);
+		LCD_I2C_write_text(buffer_fun);
+	}
 	LCD_I2C_cmd(LCD_LINEA2);
-	snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d.%02d [V]",  volt_convertido/100,volt_convertido%100);//
+	snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d.%02d [V]",  (int)volt_convertido/100,(int)volt_convertido%100);//
 	LCD_I2C_write_text(buffer_dato);
 	LCD_I2C_cmd(LCD_LINEA3);
-	snprintf(buffer_dato, sizeof(buffer_dato), "Current: %d.%02d [A]", corriente_convertido/100,corriente_convertido%100);//
+	snprintf(buffer_dato, sizeof(buffer_dato), "Current: %d.%02d [A]", (int)corriente_convertido/100,(int)corriente_convertido%100);//
 	LCD_I2C_write_text(buffer_dato);
 	LCD_I2C_cmd(LCD_LINEA4);
-	snprintf(buffer_dato, sizeof(buffer_dato), "Pot: %d.%d [W]", potencia/10,potencia%10);//
+	snprintf(buffer_dato, sizeof(buffer_dato), "Pot: %d.%d [W]", (int)potencia/10,(int)potencia%10);//
 	LCD_I2C_write_text(buffer_dato);
 }
 
 uint16_t control_carga(char modo, uint16_t voltage, uint16_t current, uint16_t set_point){
 	uint32_t calculo = 0;
 	uint16_t DAC_nuevo_valor = 0;
+	uint32_t volt_convertido = 0;
+	uint32_t corriente_convertido = 0;
+
+	volt_convertido=voltage*FACTOR_ADC_VOLTAGE_mult;//122;
+	volt_convertido=volt_convertido/FACTOR_ADC_VOLTAGE_div;//100;
+	corriente_convertido=current*FACTOR_ADC_CURRENT_mult;//8437;
+	corriente_convertido=corriente_convertido/FACTOR_ADC_CURRENT_div;//10000;
+
 	switch(modo){
-	case 'C':
+	case 'C'://seteo directo
 		calculo = set_point * 4095;//dac resol
-		//calculo = calculo /8; //div num MOSFET
-		calculo = calculo /500;//div corriente max por cada mosfet 250->2500 mA
+		calculo = calculo /N_TRANSISTORES; //div num MOSFET
+		calculo = calculo /I_MAX_x_TRANSISTOR;//div corriente max por cada mosfet 250->2500 mA
 		break;
 	case 'V':
 		//rev
+		calculo = 0;
+		break;
+	case 'P':
+		calculo = set_point * 1000;// agregamos ceros para que se alinee la coma y el resultado sea con las cifras correspondientes
+		calculo=calculo/volt_convertido;//P/V=I
+		calculo = calculo * 4095;//dac resol
+		calculo = calculo /N_TRANSISTORES; //div num MOSFET
+		calculo = calculo /I_MAX_x_TRANSISTOR;//div corriente max por cada mosfet 250->2500 mA
+		break;
+	case 'R':
+		calculo=volt_convertido*1000;//ceros para acomodar la coma
+		calculo=volt_convertido/set_point;//por ley de ohm
+		calculo = calculo * 4095;//dac resol
+		calculo = calculo /N_TRANSISTORES; //div num MOSFET
+		calculo = calculo /I_MAX_x_TRANSISTOR;//div corriente max por cada mosfet 250->2500 mA
+		break;
 	default:
 		calculo=0;
-		/*
-		 //-----------------------DAC Control Voltage for Mosfet---------------------------------------
-		void dacControlVoltage (void) {
-		  if (Mode == "CC"){
-		  setCurrent = reading*1000;                                //set current is equal to input value in Amps
-		  setReading = setCurrent;                                  //show the set current reading being used
-		  setControlCurrent = setCurrent * setCurrentCalibrationFactor;
-		  controlVoltage = setControlCurrent;
-		  }
 
-		  if (Mode == "CP"){
-		  setPower = reading*1000;                                  //in Watts
-		  setReading = setPower;
-		  setCurrent = setPower/ActualVoltage;
-		  setControlCurrent = setCurrent * setCurrentCalibrationFactor;
-		  controlVoltage = setControlCurrent;                       //
-		  }
-
-		  if (Mode == "CR"){
-		  setResistance = reading;                                  //in ohms
-		  setReading = setResistance;
-		  setCurrent = (ActualVoltage)/setResistance*1000;
-		  setControlCurrent = setCurrent * setCurrentCalibrationFactor;
-		  controlVoltage = setControlCurrent;
-		  }
-
-
-
-
-		 */
 	}
 	DAC_nuevo_valor=(uint16_t)calculo;
 	return DAC_nuevo_valor;
