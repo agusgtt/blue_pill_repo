@@ -144,7 +144,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   enviar_spi_dac(0);
   keypad_init();
-  HAL_Delay(30);
+  HAL_Delay(10);
   LCD_I2C_init();
 
 	//esto podria estar encapsulado
@@ -157,9 +157,8 @@ int main(void)
 	  HAL_Delay(4000);
 	  LCD_I2C_cmd(LCD_CLEAR);
 
-
   HAL_TIM_Base_Start_IT(&htim2);
-
+  HAL_TIM_Base_Start_IT(&htim3);
   //HAL_ADC_Start_DMA(&hadc1, input_adc, 2);//cuelga el programa
   HAL_ADCEx_Calibration_Start(&hadc1);
   HAL_ADCEx_Calibration_Start(&hadc2);
@@ -698,7 +697,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
  if(htim->Instance == TIM2){
 	 HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
 	 input_keypad=keypad_scan();//condicionar la lectura a que no este en modo activo la carga
-	 flag_update_loop_control=1; //movemos al timer3
+	 //flag_update_loop_control=1; //movemos al timer3
 
 	 if(cont_timer_update>=5){//cada segundo y medio actualiza el display
 
@@ -710,7 +709,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
  }
  if(htim->Instance == TIM3){
  	 //disparar control de la carga
-	 //flag_update_loop_control=1; //flag ciclo de control
+	 flag_update_loop_control=1; //flag ciclo de control
   }
 }
 
