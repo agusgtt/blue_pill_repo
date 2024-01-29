@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "usb_device.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -26,6 +27,7 @@
 #include "string.h"
 #include "LCD_I2C.h"
 #include "keypad_lib.h"
+#include "usbd_cdc_if.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -37,12 +39,13 @@
 /* USER CODE BEGIN PD */
 #define BUFFER_SIZE_input 4
 #define TC74_ADDRESS 0x90//direccion og.48 moviendo un bit 90
-#define N_TRANSISTORES 1
+#define N_TRANSISTORES 4
 #define I_MAX_x_TRANSISTOR 500 // 500 -> 5000mA
 #define FACTOR_ADC_VOLTAGE_mult 122
 #define FACTOR_ADC_VOLTAGE_div 100
 #define FACTOR_ADC_CURRENT_mult 7326//8437
 #define FACTOR_ADC_CURRENT_div 10000
+#define LIM_HAL_SENSOR_5A 3500
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -52,7 +55,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
-ADC_HandleTypeDef hadc2;
+DMA_HandleTypeDef hdma_adc1;
 
 I2C_HandleTypeDef hi2c1;
 
@@ -60,8 +63,6 @@ SPI_HandleTypeDef hspi1;
 
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
-
-PCD_HandleTypeDef hpcd_USB_FS;
 
 /* USER CODE BEGIN PV */
 
@@ -72,7 +73,10 @@ uint8_t flag_config = 0;
 uint8_t flag_update_display_1_seg = 0;
 uint8_t flag_update_loop_control = 0;
 uint8_t cont_timer_update = 0;
-uint32_t input_adc[2];
+uint32_t input_adc[4];
+uint32_t adc2use[2];
+uint8_t buffer_usb[64];
+char str[30]="";
 char input_keypad = 0;
 
 //char char_as_str[];// = {input_keypad, '\0'};//char mensaje[];
@@ -82,12 +86,11 @@ char buffer[20]="input key ";
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_I2C1_Init(void);
-static void MX_USB_PCD_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_SPI1_Init(void);
-static void MX_ADC2_Init(void);
 static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 void agregar_digito(char *buffer, char digito);
@@ -96,6 +99,8 @@ void display_update_conf(char modo_op,char *dato);
 void display_update_stat(char modo_op, char *dato, uint32_t volt);
 void display_update_running(char modo_op,uint32_t volt, uint32_t corriente);
 void enviar_spi_dac(uint16_t dato);
+void validar_ADC();
+void modo_usb();
 uint16_t leer_temperatura(void);
 uint16_t control_carga(char modo, uint16_t voltage, uint16_t current, uint16_t set_point);
 /* USER CODE END PFP */
@@ -134,13 +139,13 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_ADC1_Init();
   MX_I2C1_Init();
-  MX_USB_PCD_Init();
   MX_TIM2_Init();
   MX_SPI1_Init();
-  MX_ADC2_Init();
   MX_TIM3_Init();
+  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
   enviar_spi_dac(0);
   keypad_init();
@@ -159,9 +164,9 @@ int main(void)
 
   HAL_TIM_Base_Start_IT(&htim2);
   HAL_TIM_Base_Start_IT(&htim3);
-  //HAL_ADC_Start_DMA(&hadc1, input_adc, 2);//cuelga el programa
-  HAL_ADCEx_Calibration_Start(&hadc1);
-  HAL_ADCEx_Calibration_Start(&hadc2);
+  HAL_ADC_Start_DMA(&hadc1, input_adc, 4);//cuelga el programa
+  //HAL_ADCEx_Calibration_Start(&hadc1);
+  //HAL_ADCEx_Calibration_Start(&hadc2);
 
 
 
@@ -195,7 +200,7 @@ int main(void)
 		  flag_update_display_1_seg=0;
 	  }
 
-	  if(tipo_dato(input_keypad)==2){//tipo_dato()=2 si input es C,V,P,R
+	  if(tipo_dato(input_keypad)==2){//tipo_dato()=2 si input es C,P,R,usb
 		  //ingresa a la configuracion de modo
 		  flag_config=1;
 
@@ -227,6 +232,16 @@ int main(void)
 				  //borrar buffer
 				  flag_update_display=1;
 			  }
+			  else if(tipo_dato(input_keypad)==3){
+				  sprintf(str, "$USB#\n");//manda la solicitud de conexion
+				  memset(buffer_usb, '\0',64);
+				  CDC_Transmit_FS((uint8_t*) str, strlen(str));
+				  //un contador o delay
+				  HAL_Delay(1000);
+				  if(buffer_usb[0]=='$' && buffer_usb[1]=='O' && buffer_usb[2]=='K' && buffer_usb[3]=='#'){//si responde la pc, entra al bucle
+					  modo_usb();
+				  }
+			  }
 		  if(flag_update_display){
 			  display_update_conf(modo_carga,input_valor);
 			  flag_update_display=0;
@@ -238,20 +253,13 @@ int main(void)
 		  while(flag_on_off){
 			  if(flag_update_loop_control){
 
-					 HAL_ADC_Start(&hadc1);
-					 HAL_ADC_PollForConversion(&hadc1, 5);
-					 input_adc[0]=HAL_ADC_GetValue(&hadc1);
-					 HAL_ADC_Start(&hadc2);
-					 HAL_ADC_PollForConversion(&hadc2, 5);
-					 input_adc[1]=HAL_ADC_GetValue(&hadc2);
-
-					 control_spi=control_carga(modo_carga,input_adc[0],input_adc[1],set_point);
+					 control_spi=control_carga(modo_carga,adc2use[0],adc2use[1],set_point);
 					 enviar_spi_dac(control_spi);
 					 flag_update_loop_control=0;
 
 			  }
 			  if(flag_update_display_1_seg){
-				  display_update_running(modo_carga,input_adc[0],input_adc[1]);
+				  display_update_running(modo_carga,adc2use[0],adc2use[1]);
 				  flag_update_display_1_seg=0;
 				  }
 		  }//fin while flag_on_off
@@ -310,7 +318,7 @@ void SystemClock_Config(void)
     Error_Handler();
   }
   PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC|RCC_PERIPHCLK_USB;
-  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV6;
+  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV8;
   PeriphClkInit.UsbClockSelection = RCC_USBCLKSOURCE_PLL_DIV1_5;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
@@ -339,12 +347,12 @@ static void MX_ADC1_Init(void)
   /** Common config
   */
   hadc1.Instance = ADC1;
-  hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
-  hadc1.Init.ContinuousConvMode = DISABLE;
+  hadc1.Init.ScanConvMode = ADC_SCAN_ENABLE;
+  hadc1.Init.ContinuousConvMode = ENABLE;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
   hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
   hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.NbrOfConversion = 4;
   if (HAL_ADC_Init(&hadc1) != HAL_OK)
   {
     Error_Handler();
@@ -359,56 +367,36 @@ static void MX_ADC1_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN ADC1_Init 2 */
 
-  /* USER CODE END ADC1_Init 2 */
-
-}
-
-/**
-  * @brief ADC2 Initialization Function
-  * @param None
-  * @retval None
+  /** Configure Regular Channel
   */
-static void MX_ADC2_Init(void)
-{
-
-  /* USER CODE BEGIN ADC2_Init 0 */
-
-  /* USER CODE END ADC2_Init 0 */
-
-  ADC_ChannelConfTypeDef sConfig = {0};
-
-  /* USER CODE BEGIN ADC2_Init 1 */
-
-  /* USER CODE END ADC2_Init 1 */
-
-  /** Common config
-  */
-  hadc2.Instance = ADC2;
-  hadc2.Init.ScanConvMode = ADC_SCAN_DISABLE;
-  hadc2.Init.ContinuousConvMode = DISABLE;
-  hadc2.Init.DiscontinuousConvMode = DISABLE;
-  hadc2.Init.ExternalTrigConv = ADC_SOFTWARE_START;
-  hadc2.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-  hadc2.Init.NbrOfConversion = 1;
-  if (HAL_ADC_Init(&hadc2) != HAL_OK)
+  sConfig.Channel = ADC_CHANNEL_2;
+  sConfig.Rank = ADC_REGULAR_RANK_2;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();
   }
 
   /** Configure Regular Channel
   */
-  sConfig.Channel = ADC_CHANNEL_2;
-  sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
-  if (HAL_ADC_ConfigChannel(&hadc2, &sConfig) != HAL_OK)
+  sConfig.Channel = ADC_CHANNEL_3;
+  sConfig.Rank = ADC_REGULAR_RANK_3;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN ADC2_Init 2 */
 
-  /* USER CODE END ADC2_Init 2 */
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_4;
+  sConfig.Rank = ADC_REGULAR_RANK_4;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC1_Init 2 */
+
+  /* USER CODE END ADC1_Init 2 */
 
 }
 
@@ -575,33 +563,18 @@ static void MX_TIM3_Init(void)
 }
 
 /**
-  * @brief USB Initialization Function
-  * @param None
-  * @retval None
+  * Enable DMA controller clock
   */
-static void MX_USB_PCD_Init(void)
+static void MX_DMA_Init(void)
 {
 
-  /* USER CODE BEGIN USB_Init 0 */
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
 
-  /* USER CODE END USB_Init 0 */
-
-  /* USER CODE BEGIN USB_Init 1 */
-
-  /* USER CODE END USB_Init 1 */
-  hpcd_USB_FS.Instance = USB;
-  hpcd_USB_FS.Init.dev_endpoints = 8;
-  hpcd_USB_FS.Init.speed = PCD_SPEED_FULL;
-  hpcd_USB_FS.Init.low_power_enable = DISABLE;
-  hpcd_USB_FS.Init.lpm_enable = DISABLE;
-  hpcd_USB_FS.Init.battery_charging_enable = DISABLE;
-  if (HAL_PCD_Init(&hpcd_USB_FS) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN USB_Init 2 */
-
-  /* USER CODE END USB_Init 2 */
+  /* DMA interrupt init */
+  /* DMA1_Channel1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
 
 }
 
@@ -629,7 +602,8 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_10|GPIO_PIN_11, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_10|GPIO_PIN_11
+                          |GPIO_PIN_9, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : PC13 PC14 */
   GPIO_InitStruct.Pin = GPIO_PIN_13|GPIO_PIN_14;
@@ -645,15 +619,19 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PB0 PB1 PB10 PB11 */
-  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_10|GPIO_PIN_11;
+  /*Configure GPIO pins : PB0 PB1 PB10 PB11
+                           PB9 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_10|GPIO_PIN_11
+                          |GPIO_PIN_9;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PB12 PB13 PB14 PB15 */
-  GPIO_InitStruct.Pin = GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15;
+  /*Configure GPIO pins : PB12 PB13 PB14 PB15
+                           PB8 */
+  GPIO_InitStruct.Pin = GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15
+                          |GPIO_PIN_8;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
@@ -683,10 +661,12 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     if(!flag_on_off && !flag_config){
     		flag_on_off=1;// conecta la carga
     		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_SET);
+    		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_SET);
     }
     else{
     	flag_on_off=0;// desconecta la carga
     	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_RESET);
+    	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_RESET);
     }
 
     }
@@ -757,6 +737,22 @@ void enviar_spi_dac(uint16_t dato){
 		return;
 	}
 }
+void validar_ADC(){
+	//valida que adc de corriente usar o si el sense esta activo
+	//corriente
+	if(input_adc[2]>LIM_HAL_SENSOR_5A){
+		adc2use[1]=input_adc[3];
+	}else{
+		adc2use[1]=input_adc[2];
+	}
+	//tension
+	if(HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_8)==GPIO_PIN_SET){
+		adc2use[0]=input_adc[0];
+	}else{
+		adc2use[0]=input_adc[1];
+	}
+}
+
 void display_update_conf(char modo_op, char *dato){
 
 	char char_as_str[] = {modo_op, '\0'};//encapsular, funcion de uso recurrente
@@ -855,6 +851,55 @@ void display_update_stat(char modo_op, char *dato,uint32_t volt){
 	}
 
 }
+
+void modo_usb(){
+HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_SET);
+HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_SET);
+uint16_t control_spi = 0;
+
+int valor = 0;
+char mode = 'C';
+char str_aux[30]="";
+uint8_t flag_USB = 1;
+input_keypad=0;
+	while(flag_USB==1){
+  //lectura de datos USB
+		if (buffer_usb[0]=='$' && buffer_usb[1]=='C' && buffer_usb[9]=='#') {//comando config
+			sprintf(str, "$D,%c,%04d,%04d,%04d", mode,valor,(int)adc2use[0],(int)adc2use[1]);
+			mode=buffer_usb[3];
+			sprintf(str_aux, "%c%c%c%c",buffer_usb[5],buffer_usb[6],buffer_usb[7],buffer_usb[8]);
+			valor=atoi(str_aux);
+			CDC_Transmit_FS((uint8_t*) str, strlen(str));
+			memset(buffer_usb, '\0',64);
+
+		}else if(buffer_usb[0]=='$' && buffer_usb[1]=='R' && buffer_usb[2]=='e' && buffer_usb[3]=='q'){//comando request
+			sprintf(str, "$D,%c,%04d,%04d,%04d", mode,valor,(int)adc2use[0],(int)adc2use[1]);
+			CDC_Transmit_FS((uint8_t*) str, strlen(str));
+			memset(buffer_usb, '\0',64);
+		}
+  //lectura fin modo usb
+		if(tipo_dato(input_keypad)==3){
+			flag_USB=0;
+		}
+  //call a funciones de control y display
+		if(flag_update_loop_control){
+
+			 control_spi=control_carga(mode,adc2use[0],adc2use[1],(uint16_t)valor);
+			 enviar_spi_dac(control_spi);
+			 flag_update_loop_control=0;
+
+		  }
+		  if(flag_update_display_1_seg){
+			  display_update_running(mode,adc2use[0],adc2use[1]);
+			  flag_update_display_1_seg=0;
+			  }
+	}//fin while
+	  input_keypad=0;
+	  control_spi=0;
+	  enviar_spi_dac(control_spi);
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_RESET);//led
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_RESET);//cooler
+}//fin modo usb
 
 void display_update_running(char modo_op,uint32_t volt, uint32_t corriente){
 	char char_as_str[] = {modo_op, '\0'};//encapsular, funcion de uso recurrente

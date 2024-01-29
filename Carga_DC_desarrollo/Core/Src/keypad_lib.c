@@ -96,9 +96,9 @@ return 0; // No key pressed
 
 
 uint8_t tipo_dato(char input){
-	if(input=='C'||input=='V'||input=='R'||input=='P')
+	if(input=='C'||input=='R'||input=='P')
 		return 2;
-	if(input=='K')
+	if(input=='V')
 		return 3;
 	if(input=='D')
 		return 4;

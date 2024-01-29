@@ -130,7 +130,7 @@ int main(void)
 			while(HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_3)==GPIO_PIN_SET){//mientras no se apreta el boton no se sale del modo
 
 				if (buffer[0]=='$' && buffer[1]=='C' && buffer[9]=='#') {//comando config
-					sprintf(str, "$D,%c,%04d,%04d", mode,(int)adc_in[0],(int)adc_in[1]);
+					sprintf(str, "$D,%c,%04d,%04d,%04d", mode,valor,(int)adc_in[0],(int)adc_in[1]);
 					mode=buffer[3];
 					sprintf(str_aux, "%c%c%c%c",buffer[5],buffer[6],buffer[7],buffer[8]);
 					valor=atoi(str_aux);
@@ -139,7 +139,7 @@ int main(void)
 
 				}else if(buffer[0]=='$' && buffer[1]=='R' && buffer[2]=='e' && buffer[3]=='q'){//comando request
 					//sprintf(str, "$D,%04d,%04d#\n", (int)adc_in[0],(int)adc_in[1]);
-					sprintf(str, "$D,%c,%04d,%04d", mode,(int)adc_in[0],(int)adc_in[1]);
+					sprintf(str, "$D,%c,%04d,%04d,%04d", mode,valor,(int)adc_in[0],(int)adc_in[1]);
 					CDC_Transmit_FS((uint8_t*) str, strlen(str));
 					memset(buffer, '\0',64);
 				}
