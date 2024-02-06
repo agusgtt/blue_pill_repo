@@ -43,8 +43,10 @@
 #define I_MAX_x_TRANSISTOR 500 // 500 -> 5000mA
 #define FACTOR_ADC_VOLTAGE_mult 122
 #define FACTOR_ADC_VOLTAGE_div 100
-#define FACTOR_ADC_CURRENT_mult 7326//8437
-#define FACTOR_ADC_CURRENT_div 10000
+#define FACTOR_ADC_30A_CURRENT_mult 7326//8437
+#define FACTOR_ADC_30A_CURRENT_div 10000
+#define FACTOR_ADC_5A_CURRENT_mult 2400
+#define FACTOR_ADC_5A_CURRENT_div 10000
 #define LIM_HAL_SENSOR_5A 3500
 /* USER CODE END PD */
 
@@ -192,11 +194,11 @@ int main(void)
 
 	  if(flag_update_display_1_seg){//update display modo stand by
 
-		  HAL_ADC_Start(&hadc1);
-		  HAL_ADC_PollForConversion(&hadc1, 5);
-		  input_adc[0]=HAL_ADC_GetValue(&hadc1);
+		  //HAL_ADC_Start(&hadc1);
+		  //HAL_ADC_PollForConversion(&hadc1, 5);
+		  //adc2use[0]=HAL_ADC_GetValue(&hadc1);
 		  //display_update_stat(modo_carga,input_valor,input_adc[0]);
-		  display_update_stat(modo_carga,input_valor,input_adc[0]);
+		  display_update_stat(modo_carga,input_valor,adc2use[0]);
 		  flag_update_display_1_seg=0;
 	  }
 
@@ -571,11 +573,6 @@ static void MX_DMA_Init(void)
   /* DMA controller clock enable */
   __HAL_RCC_DMA1_CLK_ENABLE();
 
-  /* DMA interrupt init */
-  /* DMA1_Channel1_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
-
 }
 
 /**
@@ -689,6 +686,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
  }
  if(htim->Instance == TIM3){
  	 //disparar control de la carga
+	 validar_ADC();
 	 flag_update_loop_control=1; //flag ciclo de control
   }
 }
@@ -741,15 +739,20 @@ void validar_ADC(){
 	//valida que adc de corriente usar o si el sense esta activo
 	//corriente
 	if(input_adc[2]>LIM_HAL_SENSOR_5A){
-		adc2use[1]=input_adc[3];
+		adc2use[1]=input_adc[3]*FACTOR_ADC_30A_CURRENT_mult;
+		adc2use[1]=adc2use[1]/FACTOR_ADC_30A_CURRENT_div;
 	}else{
-		adc2use[1]=input_adc[2];
+		adc2use[1]=input_adc[2]*FACTOR_ADC_5A_CURRENT_mult;
+		adc2use[1]=adc2use[1]/FACTOR_ADC_5A_CURRENT_div;
 	}
 	//tension
 	if(HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_8)==GPIO_PIN_SET){
-		adc2use[0]=input_adc[0];
+		adc2use[0]=input_adc[0]*FACTOR_ADC_VOLTAGE_mult;//inputadc[0]marron linea baja impedancia
+		adc2use[0]=adc2use[0]/FACTOR_ADC_VOLTAGE_div;
 	}else{
-		adc2use[0]=input_adc[1];
+		adc2use[0]=input_adc[0]*FACTOR_ADC_VOLTAGE_mult;//quitar linea para usar sense
+		//adc2use[0]=input_adc[1]*FACTOR_ADC_VOLTAGE_mult;
+		adc2use[0]=adc2use[0]/FACTOR_ADC_VOLTAGE_div;
 	}
 }
 
@@ -909,13 +912,15 @@ void display_update_running(char modo_op,uint32_t volt, uint32_t corriente){
 	uint32_t corriente_convertido = 0;
 	uint32_t potencia =0;
 	uint16_t resistencia =0;
+	/*
 	volt_convertido=volt*FACTOR_ADC_VOLTAGE_mult;//122;
 	volt_convertido=volt_convertido/FACTOR_ADC_VOLTAGE_div;//100;
-	corriente_convertido=corriente*FACTOR_ADC_CURRENT_mult;//8437;
-	corriente_convertido=corriente_convertido/FACTOR_ADC_CURRENT_div;//10000;
-	potencia = volt_convertido*corriente_convertido;
+	corriente_convertido=corriente*FACTOR_ADC_30A_CURRENT_mult;//8437;
+	corriente_convertido=corriente_convertido/FACTOR_ADC_30A_CURRENT_div;//10000;
+	*/
+	potencia = volt*corriente;
 	potencia=potencia/1000;
-	resistencia=volt_convertido/corriente_convertido;
+	resistencia=volt/corriente;
 
 
 	LCD_I2C_cmd(LCD_CLEAR);
@@ -931,10 +936,10 @@ void display_update_running(char modo_op,uint32_t volt, uint32_t corriente){
 		LCD_I2C_write_text(buffer_fun);
 	}
 	LCD_I2C_cmd(LCD_LINEA2);
-	snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d.%02d [V]",  (int)volt_convertido/100,(int)volt_convertido%100);//
+	snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d.%02d [V]",  (int)volt/100,(int)volt%100);//
 	LCD_I2C_write_text(buffer_dato);
 	LCD_I2C_cmd(LCD_LINEA3);
-	snprintf(buffer_dato, sizeof(buffer_dato), "Current: %d.%02d [A]", (int)corriente_convertido/100,(int)corriente_convertido%100);//
+	snprintf(buffer_dato, sizeof(buffer_dato), "Current: %d.%02d [A]", (int)corriente/100,(int)corriente%100);//
 	LCD_I2C_write_text(buffer_dato);
 	LCD_I2C_cmd(LCD_LINEA4);
 	snprintf(buffer_dato, sizeof(buffer_dato), "Pot: %d.%d [W]", (int)potencia/10,(int)potencia%10);//
@@ -944,14 +949,16 @@ void display_update_running(char modo_op,uint32_t volt, uint32_t corriente){
 uint16_t control_carga(char modo, uint16_t voltage, uint16_t current, uint16_t set_point){
 	uint32_t calculo = 0;
 	uint16_t DAC_nuevo_valor = 0;
+	/*
+
 	uint32_t volt_convertido = 0;
 	uint32_t corriente_convertido = 0;
 
 	volt_convertido=voltage*FACTOR_ADC_VOLTAGE_mult;//122;
 	volt_convertido=volt_convertido/FACTOR_ADC_VOLTAGE_div;//100;
-	corriente_convertido=current*FACTOR_ADC_CURRENT_mult;//8437;
-	corriente_convertido=corriente_convertido/FACTOR_ADC_CURRENT_div;//10000;
-
+	corriente_convertido=current*FACTOR_ADC_30A_CURRENT_mult;//8437;
+	corriente_convertido=corriente_convertido/FACTOR_ADC_30A_CURRENT_div;//10000;
+	 */
 	switch(modo){
 	case 'C'://seteo directo
 		calculo = set_point * 4095;//dac resol
@@ -964,14 +971,14 @@ uint16_t control_carga(char modo, uint16_t voltage, uint16_t current, uint16_t s
 		break;
 	case 'P':
 		calculo = set_point * 1000;// agregamos ceros para que se alinee la coma y el resultado sea con las cifras correspondientes
-		calculo=calculo/volt_convertido;//P/V=I
+		calculo=calculo/voltage;//P/V=I
 		calculo = calculo * 4095;//dac resol
 		calculo = calculo /N_TRANSISTORES; //div num MOSFET
 		calculo = calculo /I_MAX_x_TRANSISTOR;//div corriente max por cada mosfet 250->2500 mA
 		break;
 	case 'R':
-		calculo=volt_convertido*1000;//ceros para acomodar la coma
-		calculo=volt_convertido/set_point;//por ley de ohm
+		calculo=voltage*1000;//ceros para acomodar la coma
+		calculo=voltage/set_point;//por ley de ohm
 		calculo = calculo * 4095;//dac resol
 		calculo = calculo /N_TRANSISTORES; //div num MOSFET
 		calculo = calculo /I_MAX_x_TRANSISTOR;//div corriente max por cada mosfet 250->2500 mA

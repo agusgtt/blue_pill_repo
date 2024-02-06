@@ -1,0 +1,3 @@
+../Core/Src/keypad_lib.c:24:6:keypad_init	24	static
+../Core/Src/keypad_lib.c:44:6:keypad_scan	40	static
+../Core/Src/keypad_lib.c:98:9:tipo_dato	16	static

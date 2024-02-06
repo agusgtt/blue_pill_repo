@@ -1,0 +1,4 @@
+../Core/Src/LCD_I2C.c:17:6:LCD_I2C_cmd	1
+../Core/Src/LCD_I2C.c:34:6:LCD_I2C_char	2
+../Core/Src/LCD_I2C.c:51:6:LCD_I2C_init	1
+../Core/Src/LCD_I2C.c:62:6:LCD_I2C_write_text	2
