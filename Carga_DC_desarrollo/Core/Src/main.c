@@ -41,12 +41,14 @@
 #define TC74_ADDRESS 0x90//direccion og.48 moviendo un bit 90
 #define N_TRANSISTORES 4
 #define I_MAX_x_TRANSISTOR 500 // 500 -> 5000mA
-#define FACTOR_ADC_VOLTAGE_mult 122
-#define FACTOR_ADC_VOLTAGE_div 100
+#define FACTOR_ADC_VOLTAGE_mult 12127
+#define FACTOR_ADC_VOLTAGE_div 10000
+#define OFFSET_ADC_VOLTAGE_low 95
 #define FACTOR_ADC_30A_CURRENT_mult 7326//8437
 #define FACTOR_ADC_30A_CURRENT_div 10000
-#define FACTOR_ADC_5A_CURRENT_mult 2400
+#define FACTOR_ADC_5A_CURRENT_mult 1305
 #define FACTOR_ADC_5A_CURRENT_div 10000
+#define OFFSET_5A_restar 100//534
 #define LIM_HAL_SENSOR_5A 3500
 /* USER CODE END PD */
 
@@ -635,7 +637,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : PA9 */
   GPIO_InitStruct.Pin = GPIO_PIN_9;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
@@ -655,6 +657,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     if(GPIO_Pin == GPIO_PIN_9) // INT Source is pin A9
     {
     //if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9)==GPIO_PIN_SET&&!flag_config){
+    	//while()
     if(!flag_on_off && !flag_config){
     		flag_on_off=1;// conecta la carga
     		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_SET);
@@ -742,17 +745,20 @@ void validar_ADC(){
 		adc2use[1]=input_adc[3]*FACTOR_ADC_30A_CURRENT_mult;
 		adc2use[1]=adc2use[1]/FACTOR_ADC_30A_CURRENT_div;
 	}else{
-		adc2use[1]=input_adc[2]*FACTOR_ADC_5A_CURRENT_mult;
+		adc2use[1]=input_adc[2]+OFFSET_5A_restar;
+		adc2use[1]=adc2use[1]*FACTOR_ADC_5A_CURRENT_mult;
 		adc2use[1]=adc2use[1]/FACTOR_ADC_5A_CURRENT_div;
 	}
 	//tension
 	if(HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_8)==GPIO_PIN_SET){
 		adc2use[0]=input_adc[0]*FACTOR_ADC_VOLTAGE_mult;//inputadc[0]marron linea baja impedancia
 		adc2use[0]=adc2use[0]/FACTOR_ADC_VOLTAGE_div;
+		adc2use[0]=adc2use[0]+OFFSET_ADC_VOLTAGE_low;
 	}else{
 		adc2use[0]=input_adc[0]*FACTOR_ADC_VOLTAGE_mult;//quitar linea para usar sense
 		//adc2use[0]=input_adc[1]*FACTOR_ADC_VOLTAGE_mult;
 		adc2use[0]=adc2use[0]/FACTOR_ADC_VOLTAGE_div;
+		adc2use[0]=adc2use[0]+OFFSET_ADC_VOLTAGE_low;
 	}
 }
 
@@ -792,9 +798,9 @@ void display_update_stat(char modo_op, char *dato,uint32_t volt){
 	char char_as_str[] = {modo_op, '\0'};//encapsular, funcion de uso recurrente
 	char buffer_fun[20]="";//{"Modo C",char_as_str};
 	char buffer_dato[20]="";
-	uint32_t volt_convertido = 0;
-	volt_convertido=volt*FACTOR_ADC_VOLTAGE_mult;//122;
-	volt_convertido=volt_convertido/FACTOR_ADC_VOLTAGE_div;//100;
+	//uint32_t volt_convertido = 0;
+	//volt_convertido=volt*FACTOR_ADC_VOLTAGE_mult;//122;
+	//volt_convertido=volt_convertido/FACTOR_ADC_VOLTAGE_div;//100;
 
 	snprintf(buffer_fun, sizeof(buffer_fun), "Modo C%s:", char_as_str);
 
@@ -806,7 +812,7 @@ void display_update_stat(char modo_op, char *dato,uint32_t volt){
 
 	case 'C':
 		LCD_I2C_cmd(LCD_LINEA2);
-		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d.%02d [V]", (int)volt_convertido/100,(int)volt_convertido%100);//
+		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d.%02d [V]", (int)volt/100,(int)volt%100);//
 		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA3);
 		snprintf(buffer_dato, sizeof(buffer_dato), "Current: %s0 [mA]", dato);
@@ -830,7 +836,7 @@ void display_update_stat(char modo_op, char *dato,uint32_t volt){
 		snprintf(buffer_dato, sizeof(buffer_dato), "Res: %s[mohm]", dato);
 		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA2);
-		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d.%02d [V]",  (int)volt_convertido/100,(int)volt_convertido%100);//
+		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d.%02d [V]",  (int)volt/100,(int)volt%100);//
 		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA3);
 		LCD_I2C_write_text("Current: 0[mA]");
@@ -839,7 +845,7 @@ void display_update_stat(char modo_op, char *dato,uint32_t volt){
 		break;
 	case 'P':
 		LCD_I2C_cmd(LCD_LINEA2);
-		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d.%02d [V]",  (int)volt_convertido/100,(int)volt_convertido%100);//
+		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d.%02d [V]",  (int)volt/100,(int)volt%100);//
 		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA3);
 		LCD_I2C_write_text("Current: 0[mA]");
