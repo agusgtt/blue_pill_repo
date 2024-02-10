@@ -44,8 +44,9 @@
 #define FACTOR_ADC_VOLTAGE_mult 12127
 #define FACTOR_ADC_VOLTAGE_div 10000
 #define OFFSET_ADC_VOLTAGE_low 95
-#define FACTOR_ADC_30A_CURRENT_mult 7326//8437
-#define FACTOR_ADC_30A_CURRENT_div 10000
+#define FACTOR_ADC_30A_CURRENT_mult 83072//8437
+#define FACTOR_ADC_30A_CURRENT_div 100000
+#define OFFSET_30A 7
 #define FACTOR_ADC_5A_CURRENT_mult 1305
 #define FACTOR_ADC_5A_CURRENT_div 10000
 #define OFFSET_5A_restar 100//534
@@ -71,7 +72,8 @@ TIM_HandleTypeDef htim3;
 /* USER CODE BEGIN PV */
 
 
-
+uint32_t current_tim = 0;
+uint32_t last_tim = 0;
 uint8_t flag_on_off = 0;		//bandera de conectar el dispositivo
 uint8_t flag_config = 0;
 uint8_t flag_update_display_1_seg = 0;
@@ -654,20 +656,21 @@ static void MX_GPIO_Init(void)
 // External Interrupt ISR Handler CallBackFun
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-    if(GPIO_Pin == GPIO_PIN_9) // INT Source is pin A9
+     current_tim = HAL_GetTick();
+     if(GPIO_Pin == GPIO_PIN_9 && ((current_tim-last_tim)>1000)) // INT Source is pin A9
     {
-    //if(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9)==GPIO_PIN_SET&&!flag_config){
-    	//while()
-    if(!flag_on_off && !flag_config){
-    		flag_on_off=1;// conecta la carga
-    		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_SET);
-    		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_SET);
-    }
-    else{
-    	flag_on_off=0;// desconecta la carga
-    	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_RESET);
-    	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_RESET);
-    }
+
+		if(!flag_on_off && !flag_config){
+			flag_on_off=1;// conecta la carga
+			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_SET);
+			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_SET);
+		}
+		else{
+			flag_on_off=0;// desconecta la carga
+			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_RESET);
+			}
+	last_tim=current_tim;
 
     }
 }
@@ -744,6 +747,7 @@ void validar_ADC(){
 	if(input_adc[2]>LIM_HAL_SENSOR_5A){
 		adc2use[1]=input_adc[3]*FACTOR_ADC_30A_CURRENT_mult;
 		adc2use[1]=adc2use[1]/FACTOR_ADC_30A_CURRENT_div;
+		adc2use[1]=adc2use[1]+OFFSET_30A;
 	}else{
 		adc2use[1]=input_adc[2]+OFFSET_5A_restar;
 		adc2use[1]=adc2use[1]*FACTOR_ADC_5A_CURRENT_mult;
@@ -755,8 +759,8 @@ void validar_ADC(){
 		adc2use[0]=adc2use[0]/FACTOR_ADC_VOLTAGE_div;
 		adc2use[0]=adc2use[0]+OFFSET_ADC_VOLTAGE_low;
 	}else{
-		adc2use[0]=input_adc[0]*FACTOR_ADC_VOLTAGE_mult;//quitar linea para usar sense
-		//adc2use[0]=input_adc[1]*FACTOR_ADC_VOLTAGE_mult;
+		//adc2use[0]=input_adc[0]*FACTOR_ADC_VOLTAGE_mult;//quitar linea para usar sense
+		adc2use[0]=input_adc[1]*FACTOR_ADC_VOLTAGE_mult;
 		adc2use[0]=adc2use[0]/FACTOR_ADC_VOLTAGE_div;
 		adc2use[0]=adc2use[0]+OFFSET_ADC_VOLTAGE_low;
 	}
@@ -977,7 +981,7 @@ uint16_t control_carga(char modo, uint16_t voltage, uint16_t current, uint16_t s
 		break;
 	case 'P':
 		calculo = set_point * 1000;// agregamos ceros para que se alinee la coma y el resultado sea con las cifras correspondientes
-		calculo=calculo/voltage;//P/V=I
+		calculo=calculo/voltage;//P/V=I//1500000/1440
 		calculo = calculo * 4095;//dac resol
 		calculo = calculo /N_TRANSISTORES; //div num MOSFET
 		calculo = calculo /I_MAX_x_TRANSISTOR;//div corriente max por cada mosfet 250->2500 mA
