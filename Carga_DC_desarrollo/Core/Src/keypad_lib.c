@@ -44,9 +44,9 @@ void keypad_init(void)
 char keypad_scan(void)
 {
   char keys[4][4] = {{'1', '2', '3', 'C'},
-                     {'4', '5', '6', 'V'},
+                     {'4', '5', '6', 'P'},
                      {'7', '8', '9', 'R'},
-                     {'D', '0', 'K', 'P'}};
+                     {'D', '0', 'K', 'U'}};
 
   for(int i = 0; i < 4; i++)
   {
@@ -98,7 +98,7 @@ return 0; // No key pressed
 uint8_t tipo_dato(char input){
 	if(input=='C'||input=='R'||input=='P')
 		return 2;
-	if(input=='V')
+	if(input=='U')
 		return 3;
 	if(input=='D')
 		return 4;

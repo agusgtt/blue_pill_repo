@@ -51,6 +51,7 @@
 #define FACTOR_ADC_5A_CURRENT_div 10000
 #define OFFSET_5A_restar 100//534
 #define LIM_HAL_SENSOR_5A 3500
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -104,6 +105,7 @@ void borrar_ultimo_digito(char *buffer);
 void display_update_conf(char modo_op,char *dato);
 void display_update_stat(char modo_op, char *dato, uint32_t volt);
 void display_update_running(char modo_op,uint32_t volt, uint32_t corriente);
+void display_update_running_usb(char modo_op,uint32_t volt, uint32_t corriente);
 void enviar_spi_dac(uint16_t dato);
 void validar_ADC();
 void modo_usb();
@@ -193,26 +195,31 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
+while (1)
+{
 
 	  if(flag_update_display_1_seg){//update display modo stand by
-
-		  //HAL_ADC_Start(&hadc1);
-		  //HAL_ADC_PollForConversion(&hadc1, 5);
-		  //adc2use[0]=HAL_ADC_GetValue(&hadc1);
-		  //display_update_stat(modo_carga,input_valor,input_adc[0]);
 		  display_update_stat(modo_carga,input_valor,adc2use[0]);
 		  flag_update_display_1_seg=0;
 	  }
+	  if(input_keypad=='U'){
+		  LCD_I2C_cmd(LCD_CLEAR);
+		  sprintf(str, "$USB#\n");
+		  memset(buffer_usb, '\0',64);
+		  CDC_Transmit_FS((uint8_t*) str, strlen(str));
 
-	  if(tipo_dato(input_keypad)==2){//tipo_dato()=2 si input es C,P,R,usb
+		  HAL_Delay(500);
+		  if(buffer_usb[0]=='$' && buffer_usb[1]=='O' && buffer_usb[2]=='K' && buffer_usb[3]=='#'){//si responde la pc, entra al bucle
+			  modo_usb();
+		  }
+		 input_keypad=0;
+	  }
+	  if(tipo_dato(input_keypad)==2){//tipo_dato()=2 si input es C,P,R
 		  //ingresa a la configuracion de modo
 		  flag_config=1;
 
 		  while(flag_config){
 			  if(tipo_dato(input_keypad)==1 && cont_digitos_input_val<4){//tipo_dato()=1 si input es >=0 y <=9
-				  //input_valor[cont_digitos_input_val]=input_keypad;
 				  agregar_digito(input_valor, input_keypad);
 				  input_keypad=0;
 				  cont_digitos_input_val++;
@@ -237,16 +244,6 @@ int main(void)
 				  input_keypad=0;
 				  //borrar buffer
 				  flag_update_display=1;
-			  }
-			  else if(tipo_dato(input_keypad)==3){
-				  sprintf(str, "$USB#\n");//manda la solicitud de conexion
-				  memset(buffer_usb, '\0',64);
-				  CDC_Transmit_FS((uint8_t*) str, strlen(str));
-				  //un contador o delay
-				  HAL_Delay(1000);
-				  if(buffer_usb[0]=='$' && buffer_usb[1]=='O' && buffer_usb[2]=='K' && buffer_usb[3]=='#'){//si responde la pc, entra al bucle
-					  modo_usb();
-				  }
 			  }
 		  if(flag_update_display){
 			  display_update_conf(modo_carga,input_valor);
@@ -789,7 +786,7 @@ void display_update_conf(char modo_op, char *dato){
 		snprintf(buffer_dato, sizeof(buffer_dato), "Resist.: %s [mR]", dato);
 		break;
 	case 'P':
-		snprintf(buffer_dato, sizeof(buffer_dato), "Power.: %s00 [W]", dato);
+		snprintf(buffer_dato, sizeof(buffer_dato), "Power.: %s00 [mW]", dato);
 		break;
 	default:
 		snprintf(buffer_dato, sizeof(buffer_dato), "Error: case def");
@@ -889,10 +886,17 @@ input_keypad=0;
 			sprintf(str, "$D,%c,%04d,%04d,%04d", mode,valor,(int)adc2use[0],(int)adc2use[1]);
 			CDC_Transmit_FS((uint8_t*) str, strlen(str));
 			memset(buffer_usb, '\0',64);
+		}else if(buffer_usb[0]=='$' && buffer_usb[1]=='D'){//fin modo usb
+			flag_USB=0;
+
 		}
   //lectura fin modo usb
 		if(tipo_dato(input_keypad)==3){
 			flag_USB=0;
+			sprintf(str, "$END");
+			CDC_Transmit_FS((uint8_t*) str, strlen(str));
+			memset(buffer_usb, '\0',64);
+			//enviar fin usb/ready
 		}
   //call a funciones de control y display
 		if(flag_update_loop_control){
@@ -903,7 +907,7 @@ input_keypad=0;
 
 		  }
 		  if(flag_update_display_1_seg){
-			  display_update_running(mode,adc2use[0],adc2use[1]);
+			  display_update_running_usb(mode,adc2use[0],adc2use[1]);
 			  flag_update_display_1_seg=0;
 			  }
 	}//fin while
@@ -918,8 +922,7 @@ void display_update_running(char modo_op,uint32_t volt, uint32_t corriente){
 	char char_as_str[] = {modo_op, '\0'};//encapsular, funcion de uso recurrente
 	char buffer_fun[20]="";//{"Modo C",char_as_str};
 	char buffer_dato[20]="";
-	uint32_t volt_convertido = 0;
-	uint32_t corriente_convertido = 0;
+
 	uint32_t potencia =0;
 	uint16_t resistencia =0;
 	/*
@@ -956,6 +959,47 @@ void display_update_running(char modo_op,uint32_t volt, uint32_t corriente){
 	LCD_I2C_write_text(buffer_dato);
 }
 
+void display_update_running_usb(char modo_op,uint32_t volt, uint32_t corriente){
+	char char_as_str[] = {modo_op, '\0'};//encapsular, funcion de uso recurrente
+	char buffer_fun[20]="";//{"Modo C",char_as_str};
+	char buffer_dato[20]="";
+
+	uint32_t potencia =0;
+	uint16_t resistencia =0;
+	/*
+	volt_convertido=volt*FACTOR_ADC_VOLTAGE_mult;//122;
+	volt_convertido=volt_convertido/FACTOR_ADC_VOLTAGE_div;//100;
+	corriente_convertido=corriente*FACTOR_ADC_30A_CURRENT_mult;//8437;
+	corriente_convertido=corriente_convertido/FACTOR_ADC_30A_CURRENT_div;//10000;
+	*/
+	potencia = volt*corriente;
+	potencia=potencia/1000;
+	resistencia=volt/corriente;
+
+
+	LCD_I2C_cmd(LCD_CLEAR);
+
+	snprintf(buffer_fun, sizeof(buffer_fun), "USB Modo C%s:", char_as_str);
+	LCD_I2C_cmd(LCD_LINEA1);
+	LCD_I2C_write_text(buffer_fun);
+
+	LCD_I2C_cmd(LCD_LINEA2);
+	snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %d.%02d [V]",  (int)volt/100,(int)volt%100);//
+	LCD_I2C_write_text(buffer_dato);
+	LCD_I2C_cmd(LCD_LINEA3);
+	snprintf(buffer_dato, sizeof(buffer_dato), "Current: %d.%02d [A]", (int)corriente/100,(int)corriente%100);//
+	LCD_I2C_write_text(buffer_dato);
+	LCD_I2C_cmd(LCD_LINEA4);
+	if(modo_op == 'R'){
+		if(resistencia>4999)snprintf(buffer_dato, sizeof(buffer_dato), "Res: O.Lim");
+		else snprintf(buffer_dato, sizeof(buffer_dato), "Res: %d[ohm]", resistencia);
+		LCD_I2C_write_text(buffer_dato);
+	}else{
+		snprintf(buffer_dato, sizeof(buffer_dato), "Pot: %d.%d [W]", (int)potencia/10,(int)potencia%10);//
+		LCD_I2C_write_text(buffer_dato);
+	}
+
+}
 uint16_t control_carga(char modo, uint16_t voltage, uint16_t current, uint16_t set_point){
 	uint32_t calculo = 0;
 	uint16_t DAC_nuevo_valor = 0;
