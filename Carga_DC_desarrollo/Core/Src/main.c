@@ -60,6 +60,7 @@
 #define LIM_sup_Current 2000// 20.00A
 #define LIM_sup_Pot 1500 	//150.0W
 #define LIM_inf_Res 10 		//00.10 ohm
+#define LIM_temp 55
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -118,6 +119,7 @@ void display_update_running_usb(char modo_op,uint32_t volt, uint32_t corriente);
 void enviar_spi_dac(uint16_t dato);
 void validar_ADC();
 void detectar_error(uint32_t voltage, uint32_t current);
+void print_error(uint8_t error_id);
 void modo_usb();
 uint16_t validar_input(char mode, int val);
 uint16_t leer_temperatura(void);
@@ -289,16 +291,12 @@ while (1)
 				  display_update_running(modo_carga,adc2use[0],adc2use[1]);
 				  flag_update_display_1_seg=0;
 				  }
-			  if(flag_error){
+			  if(flag_error!=0){
 				  	flag_on_off=0;
 			  		enviar_spi_dac(0);//setear el dac a 0
 			  		input_keypad = 0;
-			  		LCD_I2C_cmd(LCD_CLEAR);//cambiar display
-					LCD_I2C_cmd(LCD_LINEA2);
-					LCD_I2C_write_text("  Error electrico  ");
-					LCD_I2C_cmd(LCD_LINEA3);
-					LCD_I2C_write_text("  Press enter  ");
-			  		while(flag_error){//wait for 'K'
+			  		print_error(flag_error);
+			  		while(flag_error!=0){//wait for 'K'
 			  			if(input_keypad=='K'){
 			  				flag_error=0;
 			  			}
@@ -823,13 +821,49 @@ void detectar_error(uint32_t voltage, uint32_t current){
 uint32_t pot = 0;
 pot =voltage*current;
 pot = pot/1000;
-	if(voltage<LIM_inf_Voltage || voltage>LIM_sup_Voltage )
+	if(voltage<LIM_inf_Voltage)
 		flag_error=1;
-	else if(current<LIM_inf_Current || current>LIM_sup_Current)
-		flag_error=1;
+	else if(voltage>LIM_sup_Voltage)
+		flag_error=2;
+	else if(current<LIM_inf_Current)
+		flag_error=3;
+	else if(current>LIM_sup_Current)
+		flag_error=4;
 	else if(pot>LIM_sup_Pot)
-		flag_error=1;
+		flag_error=5;
+	//sumar error de temp
+}
+void print_error(uint8_t error_id){
+	LCD_I2C_cmd(LCD_CLEAR);//cambiar display
+	LCD_I2C_cmd(LCD_LINEA1);
+	LCD_I2C_write_text("  Error electrico  ");
+	LCD_I2C_cmd(LCD_LINEA2);
+	switch(error_id){
+	case 1:
+		LCD_I2C_write_text("  Caida de Tension  ");
+		break;
+	case 2:
+		LCD_I2C_write_text("   Sobre Tension   ");
+		break;
+	case 3:
+		LCD_I2C_write_text(" Caida de Corriente ");
+		break;
+	case 4:
+		LCD_I2C_write_text("  Sobre Corriente  ");
+		break;
+	case 5:
+		LCD_I2C_write_text("   Sobre Potencia   ");
+		break;
+	case 6:
+		LCD_I2C_write_text(" Sobre Temperatura ");
+		break;
+	default:
+		LCD_I2C_write_text("        404        ");
+	}
 
+
+	LCD_I2C_cmd(LCD_LINEA4);
+	LCD_I2C_write_text("  Press enter  ");
 }
 
 void display_update_conf(char modo_op, char *dato){
@@ -870,7 +904,7 @@ void display_update_stat(char modo_op, char *dato,uint32_t volt){
 	//uint32_t volt_convertido = 0;
 	//volt_convertido=volt*FACTOR_ADC_VOLTAGE_mult;//122;
 	//volt_convertido=volt_convertido/FACTOR_ADC_VOLTAGE_div;//100;
-
+	int dato_num = atoi(dato);
 	snprintf(buffer_fun, sizeof(buffer_fun), "Modo C%s:", char_as_str);
 
 	LCD_I2C_cmd(LCD_CLEAR);
@@ -893,7 +927,7 @@ void display_update_stat(char modo_op, char *dato,uint32_t volt){
 		LCD_I2C_write_text("Power: 0[W]");
 
 		break;
-	case 'V':
+	/*case 'V':
 		LCD_I2C_cmd(LCD_LINEA2);
 		snprintf(buffer_dato, sizeof(buffer_dato), "Voltage: %s0 [mV]", dato);
 		LCD_I2C_write_text(buffer_dato);
@@ -901,11 +935,11 @@ void display_update_stat(char modo_op, char *dato,uint32_t volt){
 		LCD_I2C_write_text("Current: 0[mA]");
 		LCD_I2C_cmd(LCD_LINEA4);
 		LCD_I2C_write_text("Power: 0[mW]");
-		break;
+		break;*/
 	case 'R':
 		LCD_I2C_cmd(LCD_CLEAR);
 		LCD_I2C_cmd(LCD_LINEA1);
-		snprintf(buffer_dato, sizeof(buffer_dato), "Res: %s0[mohm]", dato);
+		snprintf(buffer_dato, sizeof(buffer_dato), "Res: %d.%02d[ohm]", (int)dato_num/100,(int)dato_num%100);
 		LCD_I2C_write_text(buffer_dato);
 		LCD_I2C_cmd(LCD_LINEA2);
 		if(volt<LIM_inf_Voltage)
@@ -928,7 +962,7 @@ void display_update_stat(char modo_op, char *dato,uint32_t volt){
 		LCD_I2C_cmd(LCD_LINEA3);
 		LCD_I2C_write_text("Current: 0[mA]");
 		LCD_I2C_cmd(LCD_LINEA4);
-		snprintf(buffer_dato, sizeof(buffer_dato), "Power: %s00 [mW]", dato);
+		snprintf(buffer_dato, sizeof(buffer_dato), "Power: %d.%01d [W]", (int)dato_num/10,(int)dato_num%10);
 		LCD_I2C_write_text(buffer_dato);
 
 		break;
@@ -1001,17 +1035,12 @@ void display_update_running(char modo_op,uint32_t volt, uint32_t corriente){
 	char buffer_dato[20]="";
 
 	uint32_t potencia =0;
-	uint16_t resistencia =0;
-	/*
-	volt_convertido=volt*FACTOR_ADC_VOLTAGE_mult;//122;
-	volt_convertido=volt_convertido/FACTOR_ADC_VOLTAGE_div;//100;
-	corriente_convertido=corriente*FACTOR_ADC_30A_CURRENT_mult;//8437;
-	corriente_convertido=corriente_convertido/FACTOR_ADC_30A_CURRENT_div;//10000;
-	*/
+	uint32_t resistencia =0;
+
 	potencia = volt*corriente;
 	potencia=potencia/1000;
-	resistencia=volt/corriente;
-
+	resistencia=volt*100;
+	resistencia=resistencia/corriente;
 
 	LCD_I2C_cmd(LCD_CLEAR);
 	if(modo_op == 'R'){
@@ -1041,16 +1070,12 @@ void display_update_running_usb(char modo_op,uint32_t volt, uint32_t corriente){
 	char buffer_dato[20]="";
 
 	uint32_t potencia =0;
-	uint16_t resistencia =0;
-	/*
-	volt_convertido=volt*FACTOR_ADC_VOLTAGE_mult;//122;
-	volt_convertido=volt_convertido/FACTOR_ADC_VOLTAGE_div;//100;
-	corriente_convertido=corriente*FACTOR_ADC_30A_CURRENT_mult;//8437;
-	corriente_convertido=corriente_convertido/FACTOR_ADC_30A_CURRENT_div;//10000;
-	*/
+	uint32_t resistencia =0;
+
 	potencia = volt*corriente;
 	potencia=potencia/1000;
-	resistencia=volt/corriente;
+	resistencia=volt*100;
+	resistencia=resistencia/corriente;
 
 
 	LCD_I2C_cmd(LCD_CLEAR);
@@ -1067,8 +1092,7 @@ void display_update_running_usb(char modo_op,uint32_t volt, uint32_t corriente){
 	LCD_I2C_write_text(buffer_dato);
 	LCD_I2C_cmd(LCD_LINEA4);
 	if(modo_op == 'R'){
-		if(resistencia>4999)snprintf(buffer_dato, sizeof(buffer_dato), "Res: O.Lim");
-		else snprintf(buffer_dato, sizeof(buffer_dato), "Res: %d[ohm]", resistencia);
+		snprintf(buffer_dato, sizeof(buffer_dato), "Res: %d.%02d[ohm]", (int)resistencia/100,(int)resistencia%100);
 		LCD_I2C_write_text(buffer_dato);
 	}else{
 		snprintf(buffer_dato, sizeof(buffer_dato), "Pot: %d.%d [W]", (int)potencia/10,(int)potencia%10);//
@@ -1079,16 +1103,7 @@ void display_update_running_usb(char modo_op,uint32_t volt, uint32_t corriente){
 uint16_t control_carga(char modo, uint16_t voltage, uint16_t current, uint16_t set_point){
 	uint32_t calculo = 0;
 	uint16_t DAC_nuevo_valor = 0;
-	/*
 
-	uint32_t volt_convertido = 0;
-	uint32_t corriente_convertido = 0;
-
-	volt_convertido=voltage*FACTOR_ADC_VOLTAGE_mult;//122;
-	volt_convertido=volt_convertido/FACTOR_ADC_VOLTAGE_div;//100;
-	corriente_convertido=current*FACTOR_ADC_30A_CURRENT_mult;//8437;
-	corriente_convertido=corriente_convertido/FACTOR_ADC_30A_CURRENT_div;//10000;
-	 */
 	switch(modo){
 	case 'C'://seteo directo
 		calculo = set_point * 4095;//dac resol
@@ -1108,7 +1123,7 @@ uint16_t control_carga(char modo, uint16_t voltage, uint16_t current, uint16_t s
 		break;
 	case 'R':
 		calculo=voltage*100;//ceros para acomodar la coma
-		calculo=voltage/set_point;//por ley de ohm
+		calculo=calculo/set_point;//por ley de ohm
 		calculo = calculo * 4095;//dac resol
 		calculo = calculo /N_TRANSISTORES; //div num MOSFET
 		calculo = calculo /I_MAX_x_TRANSISTOR;//div corriente max por cada mosfet 250->2500 mA
